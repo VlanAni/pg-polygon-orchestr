@@ -1,0 +1,24 @@
+[project]
+name = "pg-polygon-orchestr"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "Anisimov Vladimir", email = "v.anisimov1@g.nsu.ru" }
+]
+requires-python = ">=3.14"
+dependencies = [
+    "docker>=7.2.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/pg_polygon_orchestr"]
+
+[build-system]
+requires = ["uv_build>=0.11.29,<0.12.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]
