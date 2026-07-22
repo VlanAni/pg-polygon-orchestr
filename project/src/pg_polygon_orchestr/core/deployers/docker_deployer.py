@@ -10,6 +10,8 @@ from pathlib import Path
 
 import sys
 
+from ..logger_config.info_filter import INFO_Filter
+
 from ..exception import docker_exceptions
 
 
@@ -22,6 +24,7 @@ class DockerDeployer(Deployer):
 
         info_handler = logging.StreamHandler(stream=sys.stdout)
         info_handler.setLevel(logging.INFO)
+        info_handler.addFilter(INFO_Filter())
 
         trouble_handler = logging.StreamHandler(stream=sys.stderr)
         trouble_handler.setLevel(logging.WARNING)
@@ -64,6 +67,8 @@ class DockerDeployer(Deployer):
                 buildargs={"OS_IMAGE": config.os_name},
                 tag=image_name,
             )[0]
+
+            self.logger.info(f"image {image} was built")
         except docker.errors.BuildError:
             self.logger.error(f"cannot build an image {image_name} from the Dockerfile")
 
@@ -114,15 +119,15 @@ class DockerDeployer(Deployer):
                 container_desc = self.docker_session.containers.get(container_name)
                 container_desc.remove(force=True, v=True)
             except docker.errors.NotFound:
-                self.logger.warning("docker container not found")
+                self.logger.warning(f"docker container {container_name} not found")
             except docker.errors.APIError:
-                self.logger.error("docker server returns an error!")
+                self.logger.error(f"docker server returns an error!")
 
             try:
                 # we must delete all images
                 self.docker_session.images.remove(image.id, force=True)
             except docker.errors.NotFound:
-                self.logger.warning("docker image not found")
+                self.logger.warning(f"docker image {image.tags[0]} not found")
             except docker.errors.APIError:
                 self.logger.error("docker server returns an error!")
 

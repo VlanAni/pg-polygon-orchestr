@@ -8,6 +8,8 @@ import sys
 
 from ..configs.node_config import NodeConfig
 
+from ..logger_config.info_filter import INFO_Filter
+
 import logging
 
 
@@ -19,6 +21,7 @@ class DockerNode(Node):
 
         info_handler = logging.StreamHandler(stream=sys.stdout)
         info_handler.setLevel(logging.INFO)
+        info_handler.addFilter(INFO_Filter())
 
         trouble_handler = logging.StreamHandler(stream=sys.stderr)
         trouble_handler.setLevel(logging.WARNING)
@@ -97,12 +100,13 @@ class DockerNode(Node):
         if self.my_container is not None:
             self.my_logger.info(f"stopping the container {self.my_container.name}")
 
-            if self.my_container.status == "running":
-                try:
+            try:
+                self.my_container.reload()
+                if self.my_container.status == "running":
                     self.my_container.stop()
-                except docker.errors.APIError:
-                    self.my_logger.error(f"server returns an error")
-                    return
+            except docker.errors.APIError:
+                self.my_logger.error(f"server returns an error")
+                return
 
             self.my_logger.info(f"container {self.my_container.name} stopped")
         else:
