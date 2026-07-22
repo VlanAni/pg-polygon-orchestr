@@ -1,4 +1,4 @@
-from ..configs.config import Config
+from ..configs.node_config import NodeConfig
 from .deployer import Deployer
 from ..nodes.docker_node import DockerNode
 from ..nodes.node import Node
@@ -8,18 +8,41 @@ import docker.errors
 import logging
 from pathlib import Path
 
+import sys
+
 from ..exception import docker_exceptions
 
 
 class DockerDeployer(Deployer):
 
+    def __configure_logger(self) -> None:
+        self.logger = logging.getLogger("docker_deployer")
+
+        self.logger.setLevel(logging.INFO)
+
+        info_handler = logging.StreamHandler(stream=sys.stdout)
+        info_handler.setLevel(logging.INFO)
+
+        trouble_handler = logging.StreamHandler(stream=sys.stderr)
+        trouble_handler.setLevel(logging.WARNING)
+
+        formatter = logging.Formatter(
+            "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+        )
+
+        info_handler.setFormatter(formatter)
+        trouble_handler.setFormatter(formatter)
+
+        self.logger.addHandler(info_handler)
+        self.logger.addHandler(trouble_handler)
+
     def __init__(self) -> None:
         self.docker_nodes_map: dict[int, DockerNode] = {}
         self.nodes_id_counter = 0
         self.docker_session = None
-        self.logger = logging.getLogger("docker_deployer")
+        self.__configure_logger()
 
-    def deploy(self, config: Config) -> Node:
+    def deploy(self, config: NodeConfig) -> Node:
         if self.docker_session is None:
             self.logger.info("open a new connection to the docker server")
             try:
@@ -42,17 +65,17 @@ class DockerDeployer(Deployer):
                 tag=image_name,
             )[0]
         except docker.errors.BuildError:
-            self.logger.info(f"cannot build an image {image_name} from the Dockerfile")
+            self.logger.error(f"cannot build an image {image_name} from the Dockerfile")
 
             raise docker_exceptions.ImageBuildError
 
         except docker.errors.APIError:
-            self.logger.info("server returns an error")
+            self.logger.error("server returns an error")
 
             raise docker_exceptions.DeploymentError
 
         except docker.errors.DockerException:
-            self.logger.info("unpredictable error")
+            self.logger.error("unpredictable error")
 
             raise docker_exceptions.DeploymentError
 
@@ -91,16 +114,16 @@ class DockerDeployer(Deployer):
                 container_desc = self.docker_session.containers.get(container_name)
                 container_desc.remove(force=True, v=True)
             except docker.errors.NotFound:
-                self.logger.info("docker container not found")
+                self.logger.warning("docker container not found")
             except docker.errors.APIError:
-                self.logger.info("docker server returns an error!")
+                self.logger.error("docker server returns an error!")
 
             try:
                 # we must delete all images
                 self.docker_session.images.remove(image.id, force=True)
             except docker.errors.NotFound:
-                self.logger.info("docker image not found")
+                self.logger.warning("docker image not found")
             except docker.errors.APIError:
-                self.logger.info("docker server returns an error!")
+                self.logger.error("docker server returns an error!")
 
         self.docker_session.close()

@@ -2,7 +2,7 @@ from dataclasses import dataclass
 
 
 @dataclass
-class Config:
+class NodeConfig:
     cpu_limit: int
     ram_limit: str  # for docker use this format [number]m / [number]g
     disk_limit: str  # for docker use this format [number]m / [number]g

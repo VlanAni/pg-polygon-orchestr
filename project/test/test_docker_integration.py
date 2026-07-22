@@ -5,7 +5,7 @@ pytest -m integration test/integration/test_docker_integration.py -v
 import docker
 import pytest
 
-from pg_polygon_orchestr.core.configs.config import Config
+from pg_polygon_orchestr.core.configs.node_config import NodeConfig
 from pg_polygon_orchestr.core.deployers.docker_deployer import DockerDeployer
 
 pytestmark = pytest.mark.integration
@@ -37,7 +37,7 @@ def deployer():
 @skip_if_no_docker
 class TestDockerDeployerIntegration:
     def test_two_nodes_deployed_started_named_and_destroyed(self, deployer):
-        config = Config(
+        config = NodeConfig(
             cpu_limit=1,
             ram_limit="256m",
             disk_limit="1g",

@@ -4,18 +4,40 @@ import docker
 import docker.errors
 import docker.models.images
 
-from ..configs.config import Config
+import sys
+
+from ..configs.node_config import NodeConfig
 
 import logging
 
 
 class DockerNode(Node):
+    def __configure_logger(self) -> None:
+        self.my_logger = logging.getLogger(f"docker_node_{self.id}")
+
+        self.my_logger.setLevel(logging.INFO)
+
+        info_handler = logging.StreamHandler(stream=sys.stdout)
+        info_handler.setLevel(logging.INFO)
+
+        trouble_handler = logging.StreamHandler(stream=sys.stderr)
+        trouble_handler.setLevel(logging.WARNING)
+
+        formatter = logging.Formatter(
+            "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+        )
+
+        info_handler.setFormatter(formatter)
+        trouble_handler.setFormatter(formatter)
+
+        self.my_logger.addHandler(info_handler)
+        self.my_logger.addHandler(trouble_handler)
 
     def __init__(
         self,
         docker_client: docker.DockerClient,
         image: docker.models.images.Image,
-        config: Config,
+        config: NodeConfig,
         id: int,
     ) -> None:
         self.my_session = docker_client
@@ -23,7 +45,7 @@ class DockerNode(Node):
         self.my_config = config
         self.my_container = None
         self.id = id
-        self.my_logger = logging.getLogger(f"docker_node_{self.id}")
+        self.__configure_logger()
 
     def start(self) -> None:
         if self.my_container is None:
@@ -44,16 +66,16 @@ class DockerNode(Node):
                     name=container_name,
                 )
             except docker.errors.ContainerError:
-                self.my_logger.info(
+                self.my_logger.error(
                     f"container {container_name} exited with non-zero code"
                 )
                 return
             except docker.errors.ImageNotFound:
-                self.my_logger.info(f"cannot found image {self.my_image}")
+                self.my_logger.warning(f"cannot find image {self.my_image}")
                 self.my_container = None
                 return
             except docker.errors.APIError:
-                self.my_logger.info(f"server returns an error")
+                self.my_logger.error(f"server returns an error")
                 self.my_container = None
                 return
 
@@ -66,7 +88,7 @@ class DockerNode(Node):
             try:
                 self.my_container.start()
             except docker.errors.APIError:
-                self.my_logger.info(f"server returns an error")
+                self.my_logger.error(f"server returns an error")
                 return
 
             self.my_logger.info(f"the container {self.my_container.name} is running")
@@ -79,7 +101,7 @@ class DockerNode(Node):
                 try:
                     self.my_container.stop()
                 except docker.errors.APIError:
-                    self.my_logger.info(f"server returns an error")
+                    self.my_logger.error(f"server returns an error")
                     return
 
             self.my_logger.info(f"container {self.my_container.name} stopped")
