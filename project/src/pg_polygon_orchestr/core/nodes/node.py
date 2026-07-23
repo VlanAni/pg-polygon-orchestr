@@ -11,6 +11,6 @@ class Node(ABC):
         pass
 
     @abstractmethod
-    def stop(self) -> None:
+    def stop(self, timeout: int) -> None:
         # stop container
         pass

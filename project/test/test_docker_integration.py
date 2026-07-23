@@ -44,11 +44,11 @@ class TestDockerDeployerIntegration:
             os_name="alpine:latest",
         )
 
-        node_a = deployer.deploy(config)
-        node_b = deployer.deploy(config)
+        node_a = deployer.deploy(config)  # type: ignore
+        node_b = deployer.deploy(config)  # type: ignore
 
-        node_a.start()
-        node_b.start()
+        node_a.start()  # pyright: ignore[reportUnknownMemberType]
+        node_b.start()  # type: ignore
 
         client = docker.from_env()
         try:
@@ -70,7 +70,7 @@ class TestDockerDeployerIntegration:
         finally:
             client.close()
 
-        deployer.destroy_everything()
+        deployer.destroy_everything()  # type: ignore
 
         client = docker.from_env()
 
@@ -83,3 +83,7 @@ class TestDockerDeployerIntegration:
         our_containers = [c for c in containers if c.name in expected_container_names]
 
         assert len(our_containers) == 0
+
+        assert len(deployer.getImages()) == 0
+
+        assert len(deployer.getNodes()) == 0
