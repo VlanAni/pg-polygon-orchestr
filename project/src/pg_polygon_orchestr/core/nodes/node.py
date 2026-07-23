@@ -6,11 +6,11 @@ from abc import ABC, abstractmethod
 class Node(ABC):
 
     @abstractmethod
-    def start(self) -> None:
+    def start(self) -> bool:
         # run a new container from image or start a container
         pass
 
     @abstractmethod
-    def stop(self, timeout: int) -> None:
+    def stop(self, timeout: int) -> bool:
         # stop container
         pass

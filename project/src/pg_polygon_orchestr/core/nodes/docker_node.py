@@ -19,6 +19,9 @@ class DockerNode(Node):
 
         self.my_logger.setLevel(logging.INFO)
 
+        if self.my_logger.handlers:
+            return
+
         info_handler = logging.StreamHandler(stream=sys.stdout)
         info_handler.setLevel(logging.INFO)
         info_handler.addFilter(INFO_Filter())
@@ -50,7 +53,7 @@ class DockerNode(Node):
         self.__id = id
         self.__configure_logger()
 
-    def start(self) -> None:
+    def start(self) -> bool:
         if self.__my_container is None:
             self.my_logger.info(
                 f"starting a new container from the image {self.__my_image}"
@@ -72,19 +75,21 @@ class DockerNode(Node):
                 self.my_logger.error(
                     f"container {container_name} exited with non-zero code"
                 )
-                return
+                return False
             except docker.errors.ImageNotFound:
                 self.my_logger.warning(f"cannot find image {self.__my_image}")
                 self.__my_container = None
-                return
+                return False
             except docker.errors.APIError:
                 self.my_logger.error(f"server returns an error")
                 self.__my_container = None
-                return
+                return False
 
             self.my_logger.info(
                 f"new container is running. Its' image - {self.__my_image}"
             )
+
+            return True
         else:
             self.my_logger.info(f"starting the container {self.__my_container.name}")
 
@@ -92,11 +97,13 @@ class DockerNode(Node):
                 self.__my_container.start()
             except docker.errors.APIError:
                 self.my_logger.error(f"server returns an error")
-                return
+                return False
 
             self.my_logger.info(f"the container {self.__my_container.name} is running")
 
-    def stop(self, timeout: int) -> None:
+            return True
+
+    def stop(self, timeout: int) -> bool:
         if self.__my_container is not None:
             self.my_logger.info(f"stopping the container {self.__my_container.name}")
 
@@ -106,11 +113,15 @@ class DockerNode(Node):
                     self.__my_container.stop(timeout=timeout)
             except docker.errors.APIError:
                 self.my_logger.error(f"server returns an error")
-                return
+                return False
 
             self.my_logger.info(f"container {self.__my_container.name} stopped")
+
+            return True
         else:
             self.my_logger.info("no any specified containers")
+
+            return False
 
     def clearContainer(self) -> None:
         if self.__my_container is not None:
