@@ -6,6 +6,13 @@ __pycache__/
 # C extensions
 *.so
 
+#internal
+
+uv.lock
+
+# macOS
+.DS_Store
+
 # Distribution / packaging
 .Python
 build/
