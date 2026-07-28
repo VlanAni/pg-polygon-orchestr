@@ -47,8 +47,8 @@ class TestDockerDeployerIntegration:
             os_name="alpine:latest",
         )
 
-        node_a = deployer.deploy_node(config)  # type: ignore
-        node_b = deployer.deploy_node(config)  # type: ignore
+        node_a = deployer.deploy_node("node_a", config)  # type: ignore
+        node_b = deployer.deploy_node("node_b", config)  # type: ignore
 
         node_a.start()  # pyright: ignore[reportUnknownMemberType]
         node_b.start()  # type: ignore
@@ -56,8 +56,8 @@ class TestDockerDeployerIntegration:
         client = docker.from_env()
         try:
             expected_names = {
-                "docker_node_0_container",
-                "docker_node_1_container",
+                "node_a",
+                "node_b",
             }
 
             containers = client.containers.list(all=True)
@@ -78,8 +78,8 @@ class TestDockerDeployerIntegration:
         client = docker.from_env()
 
         expected_container_names = {
-            "docker_node_0_container",
-            "docker_node_1_container",
+            "node_a",
+            "node_b",
         }
 
         containers = client.containers.list(all=True)
@@ -110,7 +110,11 @@ class TestDockerDeployerIntegration:
             os_name="ubuntu:latest",
         )
 
-        infra_config = InfConfig([config1, config1, config2, config2])
+        infra_config = InfConfig()
+        infra_config.put_config("node_a", config1)
+        infra_config.put_config("node_b", config1)
+        infra_config.put_config("node_c", config2)
+        infra_config.put_config("node_d", config2)
 
         infrasturcture = deployer.deploy_infrastructure(infra_config)
         infrasturcture.start()
@@ -118,10 +122,10 @@ class TestDockerDeployerIntegration:
         client = docker.from_env()
         try:
             expected_names = {
-                "docker_node_0_container",
-                "docker_node_1_container",
-                "docker_node_2_container",
-                "docker_node_3_container",
+                "node_a",
+                "node_b",
+                "node_c",
+                "node_d",
             }
 
             containers = client.containers.list(all=True)
@@ -137,7 +141,7 @@ class TestDockerDeployerIntegration:
         finally:
             client.close()
 
-        assert infrasturcture.stop(3)
+        assert infrasturcture.stop(0)
 
         assert infrasturcture.get_usable()
 
@@ -146,10 +150,10 @@ class TestDockerDeployerIntegration:
         client = docker.from_env()
 
         expected_container_names = {
-            "docker_node_0_container",
-            "docker_node_1_container",
-            "docker_node_2_container",
-            "docker_node_3_container",
+            "node_a",
+            "node_b",
+            "node_c",
+            "node_d",
         }
 
         containers = client.containers.list(all=True)
@@ -189,7 +193,7 @@ class TestDockerDeployerIntegration:
             os_name="",
         )
 
-        node = deployer.deploy_node(config)
+        node = deployer.deploy_node("node_a", config)
 
         # there is no any running containers
         assert not (node.update_configuration(correct_new_config))
@@ -205,7 +209,7 @@ class TestDockerDeployerIntegration:
 
         assert node.current_mem_limit() == "512m"
 
-        node.stop(1)
+        node.stop(0)
 
         assert node.update_configuration(correct_new_config)
 
@@ -219,7 +223,8 @@ class TestDockerDeployerIntegration:
             os_name="alpine:latest",
         )
 
-        infra_config = InfConfig([config])
+        infra_config = InfConfig()
+        infra_config.put_config("node_a", config=config)
 
         infrastructure = deployer.deploy_infrastructure(inf_config=infra_config)
 

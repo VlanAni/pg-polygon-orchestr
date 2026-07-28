@@ -13,7 +13,7 @@ class DockerInfrastructure(Infrastructure):
         nodes_dict: dict[str, DockerNode] = dict()
 
         for node in nodes:
-            nodes_dict[f"node_{node.get_id()}"] = node
+            nodes_dict[node.get_name()] = node
 
         return nodes_dict
 

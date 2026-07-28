@@ -15,7 +15,7 @@ import logging
 
 class DockerNode(Node):
     def __configure_logger(self) -> None:
-        self.my_logger = logging.getLogger(f"docker_node_{self.__id}")
+        self.my_logger = logging.getLogger(f"docker_node_{self.__name}")
 
         self.my_logger.setLevel(logging.INFO)
 
@@ -44,13 +44,13 @@ class DockerNode(Node):
         docker_client: docker.DockerClient,
         image: docker.models.images.Image,
         config: NodeConfig,
-        id: int,
+        name: str,
     ) -> None:
         self.__my_session = docker_client
         self.__my_image = image
         self.__my_config = config
         self.__my_container = None
-        self.__id = id
+        self.__name = name
         self.__cpu_period_default = 100000
         self.__configure_logger()
 
@@ -60,7 +60,7 @@ class DockerNode(Node):
                 f"starting a new container from the image {self.__my_image}"
             )
 
-            container_name = f"docker_node_{self.__id}_container"
+            container_name = self.__name
 
             try:
                 self.__my_container = self.__my_session.containers.run(
@@ -162,7 +162,7 @@ class DockerNode(Node):
             return False
 
         try:
-            self.__my_container.update(
+            self.__my_container.update(  # type: ignore
                 mem_limit=new_config.ram_limit,
                 cpu_period=self.__cpu_period_default,
                 cpu_quota=new_config.cpu_limit * self.__cpu_period_default,
@@ -192,8 +192,8 @@ class DockerNode(Node):
         self.__my_container = None
         return True
 
-    def get_id(self) -> int:
-        return self.__id
+    def get_name(self) -> str:
+        return self.__name
 
     def current_cpu_limit(self) -> int:
         return self.__my_config.cpu_limit

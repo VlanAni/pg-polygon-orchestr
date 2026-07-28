@@ -13,7 +13,7 @@ import sys
 
 from ..logger_config.info_filter import INFO_Filter
 
-from ..exception import docker_exceptions
+from ..exception import docker_exceptions, common_exceptions
 
 
 class DockerDeployer(Deployer):
@@ -44,14 +44,18 @@ class DockerDeployer(Deployer):
         self.logger.addHandler(trouble_handler)
 
     def __init__(self) -> None:
-        self.__docker_nodes: list[DockerNode] = []
+        self.__docker_nodes: dict[str, DockerNode] = dict()
         self.__images_ids: set[str] = set()
         self.__infrastructures: list[DockerInfrastructure] = []
-        self.__nodes_id_counter = 0
         self.__docker_session = None
         self.__configure_logger()
 
-    def deploy_node(self, config: NodeConfig) -> DockerNode:
+    def deploy_node(self, name: str, config: NodeConfig) -> DockerNode:
+        if self.__docker_nodes.get(name, None) is not None:
+            raise common_exceptions.NodeWithThatNameAlreadyExistsException(
+                f"the node with the name {name} already exists"
+            )
+
         if self.__docker_session is None:
             self.logger.info("open a new connection to the docker server")
             try:
@@ -62,8 +66,7 @@ class DockerDeployer(Deployer):
 
         self.logger.info("deploying new docker-node...")
 
-        node_id = self.__nodes_id_counter
-        image_name = f"docker_node_{node_id}_image"
+        image_name = f"{name}_image"
 
         # getting path for the build-in dockerfile (use __file__ dunder variable)
         try:
@@ -89,21 +92,28 @@ class DockerDeployer(Deployer):
             docker_client=self.__docker_session,
             image=image,
             config=config,
-            id=node_id,
+            name=name,
         )
 
         self.logger.info("new docker-node created")
 
-        self.__docker_nodes.append(docker_node)
-        self.__nodes_id_counter += 1
+        self.__docker_nodes[name] = docker_node
 
         return docker_node
 
     def deploy_infrastructure(self, inf_config: InfConfig) -> DockerInfrastructure:
         nodes: list[DockerNode] = []
 
-        for config in inf_config.get_configs():
-            nodes.append(self.deploy_node(config=config))
+        for node_name in inf_config.get_names():
+
+            config = inf_config.get_config(name=node_name)
+
+            if config is None:
+                raise common_exceptions.ThereIsNodeConfigForNodeWithSuchNameException(
+                    f"no config for the node {node_name}"
+                )
+
+            nodes.append(self.deploy_node(name=node_name, config=config))
 
         inf = DockerInfrastructure(nodes=nodes)
 
@@ -119,7 +129,7 @@ class DockerDeployer(Deployer):
             self.logger.info("there is no any connections to the docker")
             return True
 
-        for node in self.__docker_nodes:
+        for node in self.__docker_nodes.values():
             if not (node.destroy_container()):
                 self.logger.info(f"cannot delete container clearly")
 
@@ -148,7 +158,7 @@ class DockerDeployer(Deployer):
         self.logger.info("DESTROYING DONE")
         return True
 
-    def get_nodes(self) -> list[DockerNode]:
+    def get_nodes(self) -> dict[str, DockerNode]:
         return self.__docker_nodes.copy()
 
     def get_images(self) -> set[str]:
