@@ -2,6 +2,8 @@
 
 from abc import ABC, abstractmethod
 
+from .exec_result import ExecResult
+
 
 class Node(ABC):
 
@@ -13,4 +15,8 @@ class Node(ABC):
     @abstractmethod
     def stop(self, timeout: int) -> bool:
         # stop container
+        pass
+
+    @abstractmethod
+    def exec(self, command: str) -> ExecResult | None:
         pass

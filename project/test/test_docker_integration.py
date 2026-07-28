@@ -264,3 +264,35 @@ class TestDockerDeployerIntegration:
         assert infrastructure.update_configuration(correct_new_config, node_to_upd)
 
         deployer.destroy_everything()
+
+    def test_exec_simple_commands(self, deployer: DockerDeployer):
+        config = NodeConfig(
+            cpu_limit=1,
+            ram_limit="256m",
+            disk_limit="1g",
+            os_name="alpine:latest",
+        )
+
+        node_a = deployer.deploy_node(name="node_a", config=config)
+
+        assert node_a.exec('echo "hello"') is None
+
+        node_a.start()
+        node_a.stop(1)
+
+        assert node_a.exec('echo "hello"') is None
+
+        node_a.start()
+
+        result = node_a.exec("ls ./not_exist")
+
+        assert result is not None
+        assert result.exit_code is not None and result.exit_code != 0
+
+        result = node_a.exec('echo "hello"')
+
+        assert result is not None
+        assert result.exit_code is not None and result.exit_code == 0
+        assert "hello" in result.stdout and not (result.stderr)
+
+        deployer.destroy_everything()

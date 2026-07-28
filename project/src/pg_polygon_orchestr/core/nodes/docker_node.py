@@ -12,6 +12,8 @@ from ..logger_config.info_filter import INFO_Filter
 
 import logging
 
+from .exec_result import ExecResult
+
 
 class DockerNode(Node):
     def __configure_logger(self) -> None:
@@ -126,6 +128,29 @@ class DockerNode(Node):
             self.my_logger.info("no any specified containers")
 
             return False
+
+    def exec(self, command: str) -> ExecResult | None:
+        if self.__my_container is None:
+            return None
+
+        try:
+            self.__my_container.reload()  # type: ignore
+
+            if self.__my_container.status != "running":
+                return None
+
+            result = self.__my_container.exec_run(command, demux=True)
+
+            exit_code = result.exit_code
+            stdout, stderr = result.output
+
+            return ExecResult(
+                exit_code,
+                stdout=stdout.decode(encoding="utf-8") if stdout is not None else "",  # type: ignore
+                stderr=stderr.decode(encoding="utf-8") if stderr is not None else "",  # type: ignore
+            )
+        except docker.errors.APIError:
+            return None
 
     def destroy_container(self) -> bool:
         if self.__my_container is not None:
