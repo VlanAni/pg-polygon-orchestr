@@ -18,7 +18,7 @@ class Deployer(ABC):
         pass
 
     @abstractmethod
-    def destroy_everything(self) -> None:
+    def destroy_everything(self) -> bool:
         pass
 
     @abstractmethod

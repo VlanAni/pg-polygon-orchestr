@@ -112,16 +112,20 @@ class DockerDeployer(Deployer):
         return inf
 
     # these method allows you to remove all containers, all images and close the connection
-    def destroy_everything(self) -> None:
+    def destroy_everything(self) -> bool:
         self.logger.info("DESTROYING")
 
         if self.__docker_session is None:
             self.logger.info("there is no any connections to the docker")
-            return
+            return True
 
         for node in self.__docker_nodes:
-            node.stop(5)
-            node.clearContainer()
+            if not (node.destroy_container()):
+                self.logger.info(f"cannot delete container clearly")
+
+                if not (node.force_destroy_container()):
+                    self.logger.info(f"cannot force destroy container")
+                    return False
 
         for image_id in self.__images_ids:
             try:
@@ -130,6 +134,7 @@ class DockerDeployer(Deployer):
                 self.logger.warning(f"docker image with id {image_id} not found")
             except docker.errors.APIError:
                 self.logger.error("docker server returns an error!")
+                return False
 
         self.__docker_session.close()
         self.__docker_session = None
@@ -141,6 +146,7 @@ class DockerDeployer(Deployer):
             inf.mask_as_unusable()
 
         self.logger.info("DESTROYING DONE")
+        return True
 
     def get_nodes(self) -> list[DockerNode]:
         return self.__docker_nodes.copy()

@@ -93,7 +93,7 @@ class TestDockerDeployerIntegration:
 
         assert len(deployer.get_nodes()) == 0  # type: ignore
 
-    def test_infrastructure_four_nodes_start_freeze_destroy(
+    def test_infrastructure_four_nodes_start_stop_destroy(
         self, deployer: DockerDeployer
     ):
         config1 = NodeConfig(
@@ -113,7 +113,7 @@ class TestDockerDeployerIntegration:
         infra_config = InfConfig([config1, config1, config2, config2])
 
         infrasturcture = deployer.deploy_infrastructure(infra_config)
-        infrasturcture.run()
+        infrasturcture.start()
 
         client = docker.from_env()
         try:
@@ -137,7 +137,9 @@ class TestDockerDeployerIntegration:
         finally:
             client.close()
 
-        assert infrasturcture.freeze(3)
+        assert infrasturcture.stop(3)
+
+        assert infrasturcture.get_usable()
 
         deployer.destroy_everything()
 
@@ -161,4 +163,99 @@ class TestDockerDeployerIntegration:
 
         assert len(deployer.get_nodes()) == 0  # type: ignore
 
-        assert not (infrasturcture.run())
+        assert not (infrasturcture.start())
+
+        assert not (infrasturcture.get_usable())
+
+    def test_node_update_configuration(self, deployer: DockerDeployer):
+        config = NodeConfig(
+            cpu_limit=1,
+            ram_limit="256m",
+            disk_limit="1g",
+            os_name="alpine:latest",
+        )
+
+        wrong_config = NodeConfig(
+            cpu_limit=-1,
+            ram_limit="512m",
+            disk_limit="",
+            os_name="",
+        )
+
+        correct_new_config = NodeConfig(
+            cpu_limit=2,
+            ram_limit="512m",
+            disk_limit="",
+            os_name="",
+        )
+
+        node = deployer.deploy_node(config)
+
+        # there is no any running containers
+        assert not (node.update_configuration(correct_new_config))
+
+        node.start()
+
+        # wrong cpu-limit value
+        assert not (node.update_configuration(wrong_config))
+
+        assert node.update_configuration(correct_new_config)
+
+        assert node.current_cpu_limit() == 2
+
+        assert node.current_mem_limit() == "512m"
+
+        node.stop(1)
+
+        assert node.update_configuration(correct_new_config)
+
+        deployer.destroy_everything()
+
+    def test_infrastucture_update_configuration(self, deployer: DockerDeployer):
+        config = NodeConfig(
+            cpu_limit=1,
+            ram_limit="256m",
+            disk_limit="1g",
+            os_name="alpine:latest",
+        )
+
+        infra_config = InfConfig([config])
+
+        infrastructure = deployer.deploy_infrastructure(inf_config=infra_config)
+
+        nodes = infrastructure.get_nodes()
+
+        assert len(nodes) == 1
+
+        node_to_upd = list(nodes.keys())[0]
+
+        wrong_config = NodeConfig(
+            cpu_limit=-1,
+            ram_limit="512m",
+            disk_limit="",
+            os_name="",
+        )
+
+        correct_new_config = NodeConfig(
+            cpu_limit=2,
+            ram_limit="512m",
+            disk_limit="",
+            os_name="",
+        )
+
+        # there is no any running containers
+        assert not (
+            infrastructure.update_configuration(correct_new_config, node_to_upd)
+        )
+
+        infrastructure.start()
+
+        assert not (infrastructure.update_configuration(wrong_config, node_to_upd))
+
+        assert infrastructure.update_configuration(correct_new_config, node_to_upd)
+
+        infrastructure.stop(1)
+
+        assert infrastructure.update_configuration(correct_new_config, node_to_upd)
+
+        deployer.destroy_everything()
