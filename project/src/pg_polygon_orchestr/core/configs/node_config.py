@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 
 
-@dataclass
+@dataclass(frozen=True)
 class NodeConfig:
     cpu_limit: int
     ram_limit: str  # for docker use this format [number]m / [number]g
