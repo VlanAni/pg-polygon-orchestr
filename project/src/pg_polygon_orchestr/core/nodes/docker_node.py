@@ -11,6 +11,7 @@ from ..configs.node_config import NodeConfig
 from ..logger_config.info_filter import INFO_Filter
 
 import logging
+import time
 
 from .exec_result import ExecResult
 
@@ -139,15 +140,19 @@ class DockerNode(Node):
             if self.__my_container.status != "running":
                 return None
 
+            start = time.perf_counter_ns()
             result = self.__my_container.exec_run(command, demux=True)
+            end = time.perf_counter_ns()
 
             exit_code = result.exit_code
             stdout, stderr = result.output
+            execution_time = end - start
 
             return ExecResult(
                 exit_code,
                 stdout=stdout.decode(encoding="utf-8") if stdout is not None else "",  # type: ignore
                 stderr=stderr.decode(encoding="utf-8") if stderr is not None else "",  # type: ignore
+                execution_time=execution_time,
             )
         except docker.errors.APIError:
             return None

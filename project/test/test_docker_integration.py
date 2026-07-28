@@ -288,11 +288,13 @@ class TestDockerDeployerIntegration:
 
         assert result is not None
         assert result.exit_code is not None and result.exit_code != 0
+        assert result.execution_time > 0
 
         result = node_a.exec('echo "hello"')
 
         assert result is not None
         assert result.exit_code is not None and result.exit_code == 0
         assert "hello" in result.stdout and not (result.stderr)
+        assert result.execution_time > 0
 
         deployer.destroy_everything()
