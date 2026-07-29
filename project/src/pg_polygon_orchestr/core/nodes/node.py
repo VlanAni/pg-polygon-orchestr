@@ -8,12 +8,12 @@ from .exec_result import ExecResult
 class Node(ABC):
 
     @abstractmethod
-    def start(self) -> bool:
+    def start(self) -> None:
         # run a new container from image or start a container
         pass
 
     @abstractmethod
-    def stop(self, timeout: int) -> bool:
+    def stop(self, timeout: int) -> None:
         # stop container
         pass
 

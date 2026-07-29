@@ -1,14 +1,73 @@
+# ----- DOCKER_DEPLOYER
+
+
 class DeploymentError(Exception):
-    """the base class for all node building exceptions"""
+    pass
 
 
-class ImageBuildError(DeploymentError):
-    """
-    cannot build an image from the Dockerfile
-    """
+class ImageBuildError(Exception):
+    pass
 
 
-class DockerConnectionError(DeploymentError):
-    """
-    cannot connect to the docker server
-    """
+class DockerConnectionError(Exception):
+    pass
+
+
+class CreateNetworkError(Exception):
+    pass
+
+
+# исключения приватной функции создания сетей
+
+
+class CannotCreateDockerNetwork(Exception):
+    pass
+
+
+# ----- DOCKER_NODE
+
+
+# исключения которые выбрасывают функции уровня DockerNode
+class DisonnectFunctionError(Exception):
+    pass
+
+
+class DockerNodeAPIErrorOrccursException(Exception):
+    pass
+
+
+class ConnectFunctionError(Exception):
+    pass
+
+
+class CannotExecACommandOnNotRunningContainer(Exception):
+    pass
+
+
+class CannotFindImageToRunAContainer(Exception):
+    pass
+
+
+class ContainerErrorDuringRunning(Exception):
+    pass
+
+
+class NoDockerContainerToPerformOperation(Exception):
+    pass
+
+
+# Исключения принадлежащие приватным функциям подключения и отсоединения
+class CannotConnectToTheNetwork(Exception):
+    pass
+
+
+class CannotDisconnectFromTheNetwork(Exception):
+    pass
+
+
+# исключения специфичные для Update() у DockerNode
+class UpdateConfigurationCannotBePerfomedIfCpuLimitNotPositive(Exception):
+    pass
+
+
+# ----- DOCKER_INFRASTRUCTURE

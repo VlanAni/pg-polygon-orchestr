@@ -1,6 +1,8 @@
 from .infrastructure import Infrastructure
 from .docker_node import DockerNode
 from ..configs.node_config import NodeConfig
+from ..exception import docker_exceptions
+from ..exception import common_exceptions
 
 
 class DockerInfrastructure(Infrastructure):
@@ -17,39 +19,46 @@ class DockerInfrastructure(Infrastructure):
 
         return nodes_dict
 
-    def start(self) -> bool:
-        started = 0
+    def start(self) -> None:
 
         if not (self.__usable):
-            return False
+            return
 
-        nodes = list(self.__nodes.values())
+        node_names = list(self.__nodes.keys())
 
-        for node in nodes:
-            res = node.start()
+        for node_name in node_names:
+            try:
+                node = self.__nodes[node_name]
+                node.start()
+            except docker_exceptions.DockerNodeAPIErrorOrccursException as err:
+                raise common_exceptions.FailedToStartNodeFromInfrastructureException(
+                    f"docker api sends error during starting node {node_name}: {err}"
+                ) from err
+            except docker_exceptions.ConnectFunctionError as err:
+                raise common_exceptions.FailedToStartNodeFromInfrastructureException(
+                    f"connection error during starting node {node_name}: {err}"
+                ) from err
+            except docker_exceptions.ContainerErrorDuringRunning as err:
+                raise common_exceptions.FailedToStartNodeFromInfrastructureException(
+                    f"container returns errors during starting node {node_name}: {err}"
+                ) from err
+            except docker_exceptions.CannotFindImageToRunAContainer as err:
+                raise common_exceptions.FailedToStartNodeFromInfrastructureException(
+                    f"cannot find image to run a container {node_name}: {err}"
+                ) from err
 
-            if not (res):
-
-                for i in range(0, started):
-                    nodes[i].stop(0)
-
-                return False
-            else:
-                started += 1
-
-        return True
-
-    def stop(self, timeout: int) -> bool:
+    def stop(self, timeout: int) -> None:
         if not (self.__usable):
-            return False
+            return
 
-        for node in self.__nodes.values():
-            res = node.stop(timeout=timeout)
-
-            if not (res):
-                return False
-
-        return True
+        for node_name in self.__nodes.keys():
+            try:
+                node = self.__nodes[node_name]
+                node.stop(timeout=timeout)
+            except docker_exceptions.DockerNodeAPIErrorOrccursException as err:
+                raise common_exceptions.FailedToStopInfrastructure(
+                    f"failed to stop the node {node_name}: {err}"
+                )
 
     def mask_as_unusable(self) -> None:
         self.__usable = False
@@ -60,13 +69,29 @@ class DockerInfrastructure(Infrastructure):
     def get_nodes(self) -> dict[str, DockerNode]:
         return self.__nodes.copy()
 
-    def update_configuration(self, new_config: NodeConfig, node_name: str) -> bool:
+    def update_configuration(self, new_config: NodeConfig, node_name: str) -> None:
         if not (self.__usable):
-            return False
+            return
 
         node = self.__nodes.get(node_name, None)
-
         if node is None:
-            return False
-        else:
-            return node.update_configuration(new_config=new_config)
+            raise common_exceptions.FailedToFindANodeWithByItsName(
+                f"cannot find a node with the name {node_name}"
+            )
+
+        try:
+            node.update_configuration(new_config=new_config)
+        except docker_exceptions.NoDockerContainerToPerformOperation as err:
+            raise common_exceptions.FailedToUpdateConfiguration(
+                f"node {node_name} doesn't have a container"
+            ) from err
+        except (
+            docker_exceptions.UpdateConfigurationCannotBePerfomedIfCpuLimitNotPositive
+        ) as err:
+            raise common_exceptions.FailedToUpdateConfiguration(
+                f"wrong params to update"
+            ) from err
+        except docker_exceptions.DockerNodeAPIErrorOrccursException as err:
+            raise common_exceptions.FailedToUpdateConfiguration(
+                f"failed to update {node_name}'s configuration"
+            ) from err

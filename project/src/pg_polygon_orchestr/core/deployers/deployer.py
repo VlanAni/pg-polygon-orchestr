@@ -14,7 +14,7 @@ from ..nodes.infrastructure import Infrastructure
 class Deployer(ABC):
 
     @abstractmethod
-    def deploy_node(self, name: str, config: NodeConfig) -> Node:
+    def deploy_node(self, name: str, config: NodeConfig, nets: list[str]) -> Node:
         pass
 
     @abstractmethod

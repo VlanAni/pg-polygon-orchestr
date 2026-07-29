@@ -4,9 +4,9 @@ from abc import ABC, abstractmethod
 class Infrastructure(ABC):
 
     @abstractmethod
-    def start(self) -> bool:
+    def start(self) -> None:
         pass
 
     @abstractmethod
-    def stop(self, timeout: int) -> bool:
+    def stop(self, timeout: int) -> None:
         pass

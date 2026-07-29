@@ -7,3 +7,4 @@ class NodeConfig:
     ram_limit: str  # for docker use this format [number]m / [number]g
     disk_limit: str  # for docker use this format [number]m / [number]g
     os_name: str  # for docker use docker's image name
+    connect_to_docker_default_net: bool = False

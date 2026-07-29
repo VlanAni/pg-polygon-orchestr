@@ -111,10 +111,10 @@ class TestDockerDeployerIntegration:
         )
 
         infra_config = InfConfig()
-        infra_config.put_config("node_a", config1)
-        infra_config.put_config("node_b", config1)
-        infra_config.put_config("node_c", config2)
-        infra_config.put_config("node_d", config2)
+        infra_config.put_node_config("node_a", config1)
+        infra_config.put_node_config("node_b", config1)
+        infra_config.put_node_config("node_c", config2)
+        infra_config.put_node_config("node_d", config2)
 
         infrasturcture = deployer.deploy_infrastructure(infra_config)
         infrasturcture.start()
@@ -224,7 +224,7 @@ class TestDockerDeployerIntegration:
         )
 
         infra_config = InfConfig()
-        infra_config.put_config("node_a", config=config)
+        infra_config.put_node_config("node_a", config=config)
 
         infrastructure = deployer.deploy_infrastructure(inf_config=infra_config)
 

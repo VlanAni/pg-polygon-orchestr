@@ -6,14 +6,17 @@ from ..nodes.docker_node import DockerNode
 
 import docker
 import docker.errors
+import docker.models.networks as docker_networks
+
+
 import logging
 from pathlib import Path
 
 import sys
-
 from ..logger_config.info_filter import INFO_Filter
 
-from ..exception import docker_exceptions, common_exceptions
+from ..exception import docker_exceptions
+from ..exception import common_exceptions
 
 
 class DockerDeployer(Deployer):
@@ -44,13 +47,21 @@ class DockerDeployer(Deployer):
         self.logger.addHandler(trouble_handler)
 
     def __init__(self) -> None:
-        self.__docker_nodes: dict[str, DockerNode] = dict()
-        self.__images_ids: set[str] = set()
-        self.__infrastructures: list[DockerInfrastructure] = []
-        self.__docker_session = None
+        self.__docker_nodes: dict[str, DockerNode] = dict()  # реестр созданных нод
+        self.__images_ids: set[str] = set()  # реестр айдишников образов
+        self.__infrastructures: list[DockerInfrastructure] = (
+            []
+        )  # реестр развёрнутых инфраструктур
+        self.__networks: dict[str, docker_networks.Network] = (
+            dict()
+        )  # реестр созданных сетей
+        self.__docker_session = None  # состояние сессии
         self.__configure_logger()
 
-    def deploy_node(self, name: str, config: NodeConfig) -> DockerNode:
+    # деплоинг отдельной ноду
+    def deploy_node(
+        self, name: str, config: NodeConfig, nets: list[str] = []
+    ) -> DockerNode:
         if self.__docker_nodes.get(name, None) is not None:
             raise common_exceptions.NodeWithThatNameAlreadyExistsException(
                 f"the node with the name {name} already exists"
@@ -66,6 +77,12 @@ class DockerDeployer(Deployer):
 
         self.logger.info("deploying new docker-node...")
 
+        networks: list[docker_networks.Network] = []
+
+        for net_name in nets:
+            net_obj = self.__networks.get(net_name)
+            networks.append(net_obj)  # type: ignore (сеть будет не None гарантированно)
+
         image_name = f"{name}_image"
 
         # getting path for the build-in dockerfile (use __file__ dunder variable)
@@ -76,15 +93,21 @@ class DockerDeployer(Deployer):
                 tag=image_name,
             )[0]
             self.logger.info(f"image {image} was built")
-        except docker.errors.BuildError:
+        except docker.errors.BuildError as err:
             self.logger.error(f"cannot build an image {image_name} from the Dockerfile")
-            raise docker_exceptions.ImageBuildError
-        except docker.errors.APIError:
-            self.logger.error("server returns an error")
-            raise docker_exceptions.DeploymentError
-        except docker.errors.DockerException:
-            self.logger.error("unpredictable error")
-            raise docker_exceptions.DeploymentError
+            raise docker_exceptions.ImageBuildError(
+                f"cannot build an image {image_name} from the Dockerfile"
+            ) from err
+        except docker.errors.APIError as err:
+            self.logger.error(f"server returns an error: {err}")
+            raise docker_exceptions.DeploymentError(
+                f"server returns an error: {err}"
+            ) from err
+        except docker.errors.DockerException as err:
+            self.logger.error(f"unpredictable error: {err}")
+            raise docker_exceptions.DeploymentError(
+                f"unpredictable error: {err}"
+            ) from err
 
         self.__images_ids.add(image.id)  # type: ignore
 
@@ -93,6 +116,8 @@ class DockerDeployer(Deployer):
             image=image,
             config=config,
             name=name,
+            default_net=config.connect_to_docker_default_net,
+            networks=networks,
         )
 
         self.logger.info("new docker-node created")
@@ -101,19 +126,40 @@ class DockerDeployer(Deployer):
 
         return docker_node
 
+    # функция деплоинга инфраструктуры
     def deploy_infrastructure(self, inf_config: InfConfig) -> DockerInfrastructure:
+
+        try:
+            self.__create_networks(inf_config=inf_config)
+        except docker_exceptions.CannotCreateDockerNetwork as err:
+            raise docker_exceptions.CreateNetworkError(f"cannot create network: {err}")
+        except common_exceptions.ThereIsNoDataForThisKeyException as err:
+            raise common_exceptions.ThereIsNoDataForThisKeyException(
+                f"cannot find data: {err}"
+            ) from err
+
         nodes: list[DockerNode] = []
 
-        for node_name in inf_config.get_names():
+        for node_name in inf_config.get_node_names():
 
-            config = inf_config.get_config(name=node_name)
+            config = inf_config.get_node_config(name=node_name)
 
             if config is None:
-                raise common_exceptions.ThereIsNodeConfigForNodeWithSuchNameException(
+                raise common_exceptions.ThereIsNoDataForThisKeyException(
                     f"no config for the node {node_name}"
                 )
 
-            nodes.append(self.deploy_node(name=node_name, config=config))
+            nets_names = inf_config.get_node_net_data(node_name=node_name)
+            if nets_names is None:
+                raise common_exceptions.ThereIsNoDataForThisKeyException(
+                    f"cannot find networks names for this node: {node_name}"
+                )
+
+            try:
+                node = self.deploy_node(name=node_name, config=config, nets=nets_names)
+                nodes.append(node)
+            except:
+                pass
 
         inf = DockerInfrastructure(nodes=nodes)
 
@@ -121,7 +167,7 @@ class DockerDeployer(Deployer):
 
         return inf
 
-    # these method allows you to remove all containers, all images and close the connection
+    # метод уничтожающий все контейнеры, сети и образы
     def destroy_everything(self) -> bool:
         self.logger.info("DESTROYING")
 
@@ -130,7 +176,7 @@ class DockerDeployer(Deployer):
             return True
 
         for node in self.__docker_nodes.values():
-            if not (node.destroy_container()):
+            if not (node.soft_destroy_container()):
                 self.logger.info(f"cannot delete container clearly")
 
                 if not (node.force_destroy_container()):
@@ -158,6 +204,7 @@ class DockerDeployer(Deployer):
         self.logger.info("DESTROYING DONE")
         return True
 
+    # ГЕТТЕРЫ
     def get_nodes(self) -> dict[str, DockerNode]:
         return self.__docker_nodes.copy()
 
@@ -166,3 +213,28 @@ class DockerDeployer(Deployer):
 
     def get_infrastructures(self) -> list[DockerInfrastructure]:
         return self.__infrastructures
+
+    # функция создания сетей (возвращает айдишники сетей)
+    def __create_networks(self, inf_config: InfConfig) -> None:
+
+        for net_name in inf_config.get_net_names():
+            net_config = inf_config.get_net_config(net_name)
+
+            if net_config is None:
+                raise common_exceptions.ThereIsNoDataForThisKeyException(
+                    f"cannot find a config for this network: {net_name}"
+                )
+
+            try:
+                net_obj = self.__docker_session.networks.create(  # type: ignore
+                    name=net_name,
+                    driver=net_config.driver(),
+                    internal=net_config.is_internal(),
+                    enable_ipv6=net_config.ipv6_support(),
+                )
+
+                self.__networks[net_name] = net_obj
+            except docker.errors.APIError as err:
+                raise docker_exceptions.CannotCreateDockerNetwork(
+                    f"cannot create docker network {net_name}: {err}"
+                )
