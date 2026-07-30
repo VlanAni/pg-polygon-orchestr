@@ -220,7 +220,7 @@ class DockerDeployer(Deployer):
                     f"failed to deploy a node: {err}"
                 ) from err
 
-        inf = DockerInfrastructure(nodes=nodes)
+        inf = DockerInfrastructure(nodes=nodes, networks=list(self.__networks.values()))
 
         self.__infrastructures.append(inf)
 
@@ -327,13 +327,3 @@ class DockerDeployer(Deployer):
                 raise docker_exceptions.CannotCreateDockerNetwork(
                     f"cannot create docker network {net_name}: {err}"
                 )
-
-    def get_network_ip_addr(self, net_name: str) -> str | None:
-
-        net_obj = self.__networks.get(net_name, None)
-
-        if net_obj is None:
-            return None
-
-        net_obj.reload()
-        return net_obj.attrs["IPAM"]["Config"][0]["Subnet"]

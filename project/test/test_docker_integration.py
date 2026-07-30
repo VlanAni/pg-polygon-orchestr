@@ -445,102 +445,124 @@ class TestDockerDeployerIntegration:
 
         deployer.destroy_everything()
 
-    def test_8__public_network_with_three_containers(
-        self, deployer: DockerDeployer
-    ): ...
+    def test_8__public_network_with_three_containers(self, deployer: DockerDeployer):
 
-    #     inf_config = InfConfig()
+        inf_config = InfConfig()
 
-    #     # конфиг ноды (не подключаемся к дефолтной сети, она здесь будет мешать, так как из неё можно выйти в интернет)
-    #     node_config = NodeConfig(
-    #         cpu_limit=1,
-    #         ram_limit="512m",
-    #         disk_limit="",
-    #         os_name="alpine:latest",
-    #         connect_to_docker_default_net=False,
-    #     )
+        # конфиг ноды (не подключаемся к дефолтной сети, она здесь будет мешать, так как из неё можно выйти в интернет)
+        node_config = NodeConfig(
+            cpu_limit=1,
+            ram_limit="512m",
+            disk_limit="",
+            os_name="alpine:latest",
+            connect_to_docker_default_net=False,
+        )
 
-    #     # конфигурируем ноды
-    #     inf_config.put_node_config("node_a", config=node_config)
-    #     inf_config.put_node_config("node_b", config=node_config)
-    #     inf_config.put_node_config("node_c", config=node_config)
+        # конфигурируем ноды
+        inf_config.put_node_config("node_a", config=node_config)
+        inf_config.put_node_config("node_b", config=node_config)
+        inf_config.put_node_config("node_c", config=node_config)
 
-    #     # конфигурируем сеть
-    #     net_config = NetConfig(
-    #         ipv6=False, internal=False, nodes=["node_a", "node_b", "node_c"]
-    #     )
+        # конфигурируем сеть
+        net_config = NetConfig(
+            ipv6=False, internal=False, nodes=["node_a", "node_b", "node_c"]
+        )
 
-    #     assert inf_config.put_net_config("net_test_8", config=net_config)
+        assert inf_config.put_net_config("net_test_8", config=net_config)
 
-    #     # деплоим и запускаем инфраструктуру
-    #     inf = deployer.deploy_infrastructure(inf_config=inf_config)
-    #     inf.start()
+        # деплоим и запускаем инфраструктуру
+        inf = deployer.deploy_infrastructure(inf_config=inf_config)
+        inf.start()
 
-    #     # пингуемся
-    #     a_ping_b = inf.exec_command_on_node("node_a", "ping -c 1 node_b")
-    #     a_ping_c = inf.exec_command_on_node("node_a", "ping -c 1 node_c")
-    #     b_ping_a = inf.exec_command_on_node("node_b", "ping -c 1 node_a")
-    #     b_ping_c = inf.exec_command_on_node("node_b", "ping -c 1 node_c")
-    #     c_ping_a = inf.exec_command_on_node("node_c", "ping -c 1 node_a")
-    #     c_ping_b = inf.exec_command_on_node("node_c", "ping -c 1 node_b")
+        # пингуемся
+        a_ping_b = inf.exec_command_on_node("node_a", "ping -c 1 node_b")
+        a_ping_c = inf.exec_command_on_node("node_a", "ping -c 1 node_c")
+        b_ping_a = inf.exec_command_on_node("node_b", "ping -c 1 node_a")
+        b_ping_c = inf.exec_command_on_node("node_b", "ping -c 1 node_c")
+        c_ping_a = inf.exec_command_on_node("node_c", "ping -c 1 node_a")
+        c_ping_b = inf.exec_command_on_node("node_c", "ping -c 1 node_b")
 
-    #     # пропинговалися, проверяемся
-    #     assert self.__check_exit_code(a_ping_b, 0, True)
-    #     assert self.__check_exit_code(a_ping_c, 0, True)
-    #     assert self.__check_exit_code(b_ping_a, 0, True)
-    #     assert self.__check_exit_code(b_ping_c, 0, True)
-    #     assert self.__check_exit_code(c_ping_a, 0, True)
-    #     assert self.__check_exit_code(c_ping_b, 0, True)
+        # пропинговалися, проверяемся
+        assert self.__check_exit_code(a_ping_b, 0, True)
+        assert self.__check_exit_code(a_ping_c, 0, True)
+        assert self.__check_exit_code(b_ping_a, 0, True)
+        assert self.__check_exit_code(b_ping_c, 0, True)
+        assert self.__check_exit_code(c_ping_a, 0, True)
+        assert self.__check_exit_code(c_ping_b, 0, True)
 
-    #     # пингуем гугл, должно пропинговаться
-    #     a_ping_google = inf.exec_command_on_node("node_a", "ping -c 3 8.8.8.8")
+        # пингуем гугл, должно пропинговаться
+        a_ping_google = inf.exec_command_on_node("node_a", "ping -c 3 8.8.8.8")
 
-    #     # пропинговались?
-    #     assert self.__check_exit_code(a_ping_google, 0, True)
+        # пропинговались?
+        assert self.__check_exit_code(a_ping_google, 0, True)
 
-    #     deployer.destroy_everything()
+        deployer.destroy_everything()
 
-    # def test_9__four_nodes_and_four_networks(self, deployer: DockerDeployer):
+    def test_9__four_nodes_and_four_networks(self, deployer: DockerDeployer):
 
-    #     inf_config = InfConfig()
+        inf_config = InfConfig()
 
-    #     node_config = NodeConfig(
-    #         cpu_limit=1,
-    #         ram_limit="512m",
-    #         disk_limit="",
-    #         os_name="ubuntu:latest",
-    #         ip_forwarding=True,
-    #         connect_to_docker_default_net=True,
-    #     )
+        node_config = NodeConfig(
+            cpu_limit=1,
+            ram_limit="512m",
+            disk_limit="",
+            os_name="ubuntu:latest",
+            docker_net_admin_cap=True,
+            connect_to_docker_default_net=True,
+        )
 
-    #     inf_config.put_node_config("node_a", config=node_config)
-    #     inf_config.put_node_config("node_b", config=node_config)
-    #     inf_config.put_node_config("node_c", config=node_config)
-    #     inf_config.put_node_config("node_d", config=node_config)
+        inf_config.put_node_config("node_a", config=node_config)
+        inf_config.put_node_config("node_b", config=node_config)
+        inf_config.put_node_config("node_c", config=node_config)
+        inf_config.put_node_config("node_d", config=node_config)
 
-    #     net_config_1 = NetConfig(ipv6=False, internal=False, nodes=["node_a", "node_b"])
-    #     net_config_2 = NetConfig(ipv6=False, internal=False, nodes=["node_b", "node_c"])
-    #     net_config_3 = NetConfig(ipv6=False, internal=False, nodes=["node_c", "node_d"])
-    #     net_config_4 = NetConfig(ipv6=False, internal=False, nodes=["node_d", "node_a"])
+        net_config_1 = NetConfig(ipv6=False, internal=False, nodes=["node_a", "node_b"])
+        net_config_2 = NetConfig(ipv6=False, internal=False, nodes=["node_b", "node_c"])
+        net_config_3 = NetConfig(ipv6=False, internal=False, nodes=["node_c", "node_d"])
+        net_config_4 = NetConfig(ipv6=False, internal=False, nodes=["node_d", "node_a"])
 
-    #     inf_config.put_net_config("1", config=net_config_1)
-    #     inf_config.put_net_config("2", config=net_config_2)
-    #     inf_config.put_net_config("3", config=net_config_3)
-    #     inf_config.put_net_config("4", config=net_config_4)
+        inf_config.put_net_config("1", config=net_config_1)
+        inf_config.put_net_config("2", config=net_config_2)
+        inf_config.put_net_config("3", config=net_config_3)
+        inf_config.put_net_config("4", config=net_config_4)
 
-    #     inf = deployer.deploy_infrastructure(inf_config=inf_config)
+        inf = deployer.deploy_infrastructure(inf_config=inf_config)
 
-    #     inf.start()
+        inf.start()
 
-    #     a_ping_c = inf.exec_command_on_node("node_a", "ping -c 1 node_c")
-    #     b_ping_d = inf.exec_command_on_node("node_b", "ping -c 1 node_d")
-    #     c_ping_a = inf.exec_command_on_node("node_c", "ping -c 1 node_a")
-    #     d_ping_b = inf.exec_command_on_node("node_d", "ping -c 1 node_b")
+        package_update = inf.exec_command_on_node(
+            node_name="node_a", command="apt-get update -qq"
+        )
+        assert self.__check_exit_code(package_update, 0, True)
 
-    #     assert self.__check_exit_code(a_ping_c, 0, True)
-    #     assert self.__check_exit_code(b_ping_d, 0, True)
-    #     assert self.__check_exit_code(c_ping_a, 0, True)
-    #     assert self.__check_exit_code(d_ping_b, 0, True)
+        package_installation = inf.exec_command_on_node(
+            node_name="node_a", command="apt-get install -y iproute2 iputils-ping"
+        )
+        assert self.__check_exit_code(package_installation, 0, True)
+
+        node_b_as_router = inf.exec_command_on_node(
+            node_name="node_b", command="sysctl -w net.ipv4.ip_forward=1"
+        )
+        assert self.__check_exit_code(node_b_as_router, 0, True)
+
+        net_2_ip = inf.get_network_ip_addr("2")
+        assert net_2_ip is not None
+
+        node_c_ip_net_2 = inf.get_node_ip_in_network(node_name="node_c", net_name="2")
+        assert node_c_ip_net_2 is not None
+
+        node_b_ip_net_1 = inf.get_node_ip_in_network(node_name="node_b", net_name="1")
+        assert node_b_ip_net_1 is not None
+
+        result = inf.exec_command_on_node(
+            "node_a", f"ip route add {net_2_ip} via {node_b_ip_net_1}"
+        )
+        assert self.__check_exit_code(result, 0, True)
+
+        a_ping_c = inf.exec_command_on_node("node_a", f"ping -c 1 {node_c_ip_net_2}")
+        assert self.__check_exit_code(a_ping_c, 0, True)
+
+        deployer.destroy_everything()
 
     def __check_exit_code(
         self, exec_result: ExecResult | None, expected: int, equal: bool

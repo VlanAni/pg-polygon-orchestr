@@ -5,12 +5,21 @@ from ..exception import docker_exceptions
 from ..exception import common_exceptions
 from .exec_result import ExecResult
 
+from docker.models import networks as docker_networks
+
 
 class DockerInfrastructure(Infrastructure):
 
-    def __init__(self, nodes: list[DockerNode]) -> None:
+    def __init__(
+        self,
+        nodes: list[DockerNode],
+        networks: list[docker_networks.Network] | None = None,
+    ) -> None:
         self.__nodes = self.__init_nodes_dict(nodes)
         self.__usable = True
+        self.__networks = (
+            {} if networks is None else self.__init_network_dict(networks=networks)
+        )
 
     def __init_nodes_dict(self, nodes: list[DockerNode]) -> dict[str, DockerNode]:
         nodes_dict: dict[str, DockerNode] = dict()
@@ -19,6 +28,16 @@ class DockerInfrastructure(Infrastructure):
             nodes_dict[node.get_name()] = node
 
         return nodes_dict
+
+    def __init_network_dict(
+        self, networks: list[docker_networks.Network]
+    ) -> dict[str, docker_networks.Network]:
+        net_dict: dict[str, docker_networks.Network] = dict()
+
+        for net_obj in networks:
+            net_dict[net_obj.name] = net_obj  # type: ignore
+
+        return net_dict
 
     def start(self) -> None:
 
@@ -137,3 +156,26 @@ class DockerInfrastructure(Infrastructure):
             raise common_exceptions.FailedToUpdateConfiguration(
                 f"failed to update {node_name}'s configuration"
             ) from err
+
+    def get_network_ip_addr(self, net_name: str) -> str | None:
+
+        net_obj = self.__networks.get(net_name, None)
+
+        if net_obj is None:
+            return None
+
+        net_obj.reload()
+
+        if net_obj.attrs["IPAM"]["Config"] is None or []:
+            return None
+
+        return net_obj.attrs["IPAM"]["Config"][0]["Subnet"]
+
+    def get_node_ip_in_network(self, node_name: str, net_name: str) -> str | None:
+
+        node = self.__nodes.get(node_name, None)
+
+        if node is None:
+            return None
+
+        return node.get_node_network_ip(net_name=net_name)

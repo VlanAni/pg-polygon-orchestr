@@ -99,10 +99,8 @@ class DockerNode(Node):
                             else self.__my_networks[0].name
                         )
                     ),
-                    sysctls=(
-                        None
-                        if not (self.__my_config.ip_forwarding)
-                        else {"net.ipv4.ip_forward": "1"}
+                    cap_add=(
+                        ["NET_ADMIN"] if self.__my_config.docker_net_admin_cap else None
                     ),
                 )
 
@@ -373,4 +371,19 @@ class DockerNode(Node):
     def get_os(self) -> str:
         return self.__my_config.os_name
 
-    def get_node_network_ip(self, net_name: str) -> str | None: ...
+    def get_node_network_ip(self, net_name: str) -> str | None:
+
+        if self.__my_container is None:
+            return None
+
+        self.__my_container.reload()
+
+        if (
+            self.__my_container.attrs["NetworkSettings"]["Networks"].get(net_name)
+            is None
+        ):
+            return None
+
+        return self.__my_container.attrs["NetworkSettings"]["Networks"][net_name][
+            "IPAddress"
+        ]
