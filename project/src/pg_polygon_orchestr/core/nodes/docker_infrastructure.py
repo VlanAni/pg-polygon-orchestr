@@ -3,6 +3,7 @@ from .docker_node import DockerNode
 from ..configs.node_config import NodeConfig
 from ..exception import docker_exceptions
 from ..exception import common_exceptions
+from .exec_result import ExecResult
 
 
 class DockerInfrastructure(Infrastructure):
@@ -31,18 +32,25 @@ class DockerInfrastructure(Infrastructure):
                 node = self.__nodes[node_name]
                 node.start()
             except docker_exceptions.DockerNodeAPIErrorOrccursException as err:
+
                 raise common_exceptions.FailedToStartNodeFromInfrastructureException(
                     f"docker api sends error during starting node {node_name}: {err}"
                 ) from err
+
             except docker_exceptions.ConnectFunctionError as err:
+
                 raise common_exceptions.FailedToStartNodeFromInfrastructureException(
                     f"connection error during starting node {node_name}: {err}"
                 ) from err
+
             except docker_exceptions.ContainerErrorDuringRunning as err:
+
                 raise common_exceptions.FailedToStartNodeFromInfrastructureException(
                     f"container returns errors during starting node {node_name}: {err}"
                 ) from err
+
             except docker_exceptions.CannotFindImageToRunAContainer as err:
+
                 raise common_exceptions.FailedToStartNodeFromInfrastructureException(
                     f"cannot find image to run a container {node_name}: {err}"
                 ) from err
@@ -56,9 +64,37 @@ class DockerInfrastructure(Infrastructure):
                 node = self.__nodes[node_name]
                 node.stop(timeout=timeout)
             except docker_exceptions.DockerNodeAPIErrorOrccursException as err:
+
                 raise common_exceptions.FailedToStopInfrastructure(
                     f"failed to stop the node {node_name}: {err}"
                 )
+
+    def exec_command_on_node(self, node_name: str, command: str) -> ExecResult | None:
+        if not (self.__usable):
+            return
+
+        node = self.__nodes.get(node_name, None)
+
+        if node is None:
+
+            raise common_exceptions.FailedToExecuteCommand(
+                f"there is no node with the name {node_name}"
+            )
+
+        try:
+            result = node.exec(command=command)
+            return result
+        except docker_exceptions.CannotExecACommandOnNotRunningContainer as err:
+
+            raise common_exceptions.FailedToExecuteCommand(
+                f"the node {node_name} hasn't its running container: {err}"
+            )
+
+        except docker_exceptions.DockerNodeAPIErrorOrccursException as err:
+
+            raise common_exceptions.FailedToExecuteCommand(
+                f"failed to execute a command because of API error: {err}"
+            )
 
     def mask_as_unusable(self) -> None:
         self.__usable = False
@@ -75,6 +111,7 @@ class DockerInfrastructure(Infrastructure):
 
         node = self.__nodes.get(node_name, None)
         if node is None:
+
             raise common_exceptions.FailedToFindANodeWithByItsName(
                 f"cannot find a node with the name {node_name}"
             )
@@ -82,16 +119,21 @@ class DockerInfrastructure(Infrastructure):
         try:
             node.update_configuration(new_config=new_config)
         except docker_exceptions.NoDockerContainerToPerformOperation as err:
+
             raise common_exceptions.FailedToUpdateConfiguration(
                 f"node {node_name} doesn't have a container"
             ) from err
+
         except (
             docker_exceptions.UpdateConfigurationCannotBePerfomedIfCpuLimitNotPositive
         ) as err:
+
             raise common_exceptions.FailedToUpdateConfiguration(
                 f"wrong params to update"
             ) from err
+
         except docker_exceptions.DockerNodeAPIErrorOrccursException as err:
+
             raise common_exceptions.FailedToUpdateConfiguration(
                 f"failed to update {node_name}'s configuration"
             ) from err

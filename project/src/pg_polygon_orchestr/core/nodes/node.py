@@ -18,5 +18,5 @@ class Node(ABC):
         pass
 
     @abstractmethod
-    def exec(self, command: str) -> ExecResult | None:
+    def exec(self, command: str) -> ExecResult:
         pass

@@ -14,11 +14,13 @@ from ..nodes.infrastructure import Infrastructure
 class Deployer(ABC):
 
     @abstractmethod
-    def deploy_node(self, name: str, config: NodeConfig, nets: list[str]) -> Node:
+    def deploy_node(
+        self, name: str, config: NodeConfig, nets: list[str] | None
+    ) -> Node:
         pass
 
     @abstractmethod
-    def destroy_everything(self) -> bool:
+    def destroy_everything(self) -> None:
         pass
 
     @abstractmethod

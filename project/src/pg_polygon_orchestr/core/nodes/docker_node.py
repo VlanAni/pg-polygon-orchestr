@@ -53,13 +53,15 @@ class DockerNode(Node):
         config: NodeConfig,
         name: str,
         default_net: bool,
-        networks: list[docker_networks.Network] = [],
+        networks: list[docker_networks.Network] | None = None,
     ) -> None:
         self.__my_session = docker_client
         self.__my_image = image
         self.__my_config = config
         self.__my_container: docker_containers.Container | None = None
-        self.__my_networks: list[docker_networks.Network] = networks.copy()
+        self.__my_networks: list[docker_networks.Network] = (
+            networks.copy() if networks is not None else []
+        )
         self.__default_net = default_net
         self.__name = name
         self.__cpu_period_default = 100000
@@ -96,6 +98,11 @@ class DockerNode(Node):
                             if not (self.__my_networks)
                             else self.__my_networks[0].name
                         )
+                    ),
+                    sysctls=(
+                        None
+                        if not (self.__my_config.ip_forwarding)
+                        else {"net.ipv4.ip_forward": "1"}
                     ),
                 )
 
@@ -185,14 +192,18 @@ class DockerNode(Node):
             return
 
     # исполнение команды
-    def exec(self, command: str) -> ExecResult | None:
+    def exec(self, command: str) -> ExecResult:
         if self.__my_container is None:
-            return None
+
+            raise CannotExecACommandOnNotRunningContainer(
+                f"cannot run the command {command} on the not exist container"
+            )
 
         try:
             self.__my_container.reload()  # type: ignore
 
             if self.__my_container.status != "running":
+
                 raise CannotExecACommandOnNotRunningContainer(
                     f"cannot run the command {command} on the not running container {self.__my_container.name}"
                 )
@@ -212,6 +223,7 @@ class DockerNode(Node):
                 execution_time=execution_time,
             )
         except docker.errors.APIError:
+
             raise DockerNodeAPIErrorOrccursException(
                 f"cannot execute the command {command} on the container {self.__my_container.name}"
             )
@@ -360,3 +372,5 @@ class DockerNode(Node):
 
     def get_os(self) -> str:
         return self.__my_config.os_name
+
+    def get_node_network_ip(self, net_name: str) -> str | None: ...

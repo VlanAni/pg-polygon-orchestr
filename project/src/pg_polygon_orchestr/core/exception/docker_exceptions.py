@@ -24,6 +24,21 @@ class CannotCreateDockerNetwork(Exception):
     pass
 
 
+# ислючения функции destroy_everything
+
+
+class CannotDestroyTheNodeException(Exception):
+    pass
+
+
+class CannotDestroyTheImageException(Exception):
+    pass
+
+
+class CannotDestroyTheNetwork(Exception):
+    pass
+
+
 # ----- DOCKER_NODE
 
 

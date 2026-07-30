@@ -18,6 +18,7 @@ class InfConfig:
     def put_node_config(self, node_name: str, config: NodeConfig) -> bool:
         if self.__node_configs.get(node_name, None) is None:
             self.__node_configs[node_name] = config
+            self.__net_registry[node_name] = []
             return True
 
         return False
@@ -27,7 +28,7 @@ class InfConfig:
             return False
 
         for node_name in config.get_nodes():
-            if self.__net_configs.get(node_name, None) is None:
+            if self.__node_configs.get(node_name, None) is None:
                 self.__delete_net_from_net_registry(net_name=net_name)
 
                 raise NetConfigIncludeNotConfiguredNodeException(

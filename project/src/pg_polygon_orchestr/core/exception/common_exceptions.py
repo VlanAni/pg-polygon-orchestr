@@ -27,3 +27,17 @@ class FailedToFindANodeWithByItsName(Exception):
 
 class FailedToUpdateConfiguration(Exception):
     pass
+
+
+class FailedToExecuteCommand(Exception):
+    pass
+
+
+# ----- DEPLOYER
+
+
+class CannotDeployNodeException(Exception):
+    pass
+
+
+# -----
