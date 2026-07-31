@@ -25,3 +25,11 @@ class Node(ABC):
     @abstractmethod
     def update_configuration(self, new_config: NodeConfig) -> None:
         pass
+
+    @abstractmethod
+    def get_node_network_ip(self, net_name: str) -> str | None:
+        pass
+
+    @abstractmethod
+    def get_name(self) -> str:
+        pass

@@ -29,10 +29,6 @@ class FailedToFindANodeWithByItsName(Exception):
     pass
 
 
-class FailedToUpdateConfiguration(Exception):
-    pass
-
-
 class FailedToExecuteCommand(Exception):
     pass
 
@@ -48,4 +44,28 @@ class CannotDeployInfra(Exception):
     pass
 
 
-# -----
+# ----- NODE_LINK
+
+
+class NodeIsNotDeployer(Exception):
+    pass
+
+
+class FailedToStartNode(Exception):
+    pass
+
+
+class FailedToStopNode(Exception):
+    pass
+
+
+class FailedToExecCommand(Exception):
+    pass
+
+
+class FailedToUpdateConfiguration(Exception):
+    pass
+
+
+class FailedToGetIP(Exception):
+    pass

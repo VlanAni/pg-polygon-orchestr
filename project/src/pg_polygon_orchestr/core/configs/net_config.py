@@ -1,11 +1,13 @@
 class NetConfig:
     def __init__(
         self,
+        name: str,
         ipv6: bool,
         internal: bool,
         nodes: list[str],
         driver: str = "bridge",
     ):
+        self.__name = name
         self.__ipv6 = ipv6
         self.__internal = internal
         self.__nodes = nodes.copy()
@@ -13,6 +15,9 @@ class NetConfig:
 
     def get_nodes(self) -> list[str]:
         return self.__nodes.copy()
+
+    def name(self) -> str:
+        return self.__name
 
     def is_internal(self) -> bool:
         return self.__internal
