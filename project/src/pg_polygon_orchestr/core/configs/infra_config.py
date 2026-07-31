@@ -1,19 +1,18 @@
 from .node_config import NodeConfig
 from .net_config import NetConfig
-from ..exception.common_exceptions import NetConfigIncludeNotConfiguredNodeException
-
-import copy
+from .docker_volume_config import VolumeConfig
+from ..exception import common_exceptions
 
 
 class InfConfig:
 
-    def __init__(self, node_configs: dict[str, NodeConfig] | None = None) -> None:
-        self.__node_configs = (
-            copy.deepcopy(node_configs) if node_configs is not None else {}
-        )
-
+    def __init__(self) -> None:
+        self.__node_configs: dict[str, NodeConfig] = dict()
         self.__net_configs: dict[str, NetConfig] = dict()
         self.__net_registry: dict[str, list[str]] = dict()
+        self.__docker_volume_configs: dict[str, VolumeConfig] = dict()
+
+    # ----- УПАКОВКА КОНФИГОВ
 
     def put_node_config(self, node_name: str, config: NodeConfig) -> bool:
         if self.__node_configs.get(node_name, None) is None:
@@ -31,7 +30,7 @@ class InfConfig:
             if self.__node_configs.get(node_name, None) is None:
                 self.__delete_net_from_net_registry(net_name=net_name)
 
-                raise NetConfigIncludeNotConfiguredNodeException(
+                raise common_exceptions.NetConfigIncludeNotConfiguredNodeException(
                     f"network {net_name} has the not configured node {node_name}"
                 )
             else:
@@ -40,6 +39,24 @@ class InfConfig:
         self.__net_configs[net_name] = config
 
         return True
+
+    def put_volume_config(self, config: VolumeConfig) -> bool:
+        if self.__docker_volume_configs.get(config.name(), None) is not None:
+            return False
+
+        volume_name = config.name()
+        node_name = config.owner_name()
+
+        if self.__node_configs.get(node_name, None) is None:
+            raise common_exceptions.DockerVolumeConfigIncludeNotConfiguredNode(
+                f"the volume {volume_name} include {node_name} which is not configured"
+            )
+
+        self.__docker_volume_configs[volume_name] = config
+
+        return True
+
+    # ----- ГЕТТЕРЫ
 
     def get_node_names(self) -> list[str]:
         return list(self.__node_configs.keys())
@@ -57,6 +74,11 @@ class InfConfig:
         connected_networks = self.__net_registry.get(node_name, None)
 
         return connected_networks.copy() if connected_networks is not None else None
+
+    def get_volumes(self) -> list[VolumeConfig]:
+        return list(self.__docker_volume_configs.values())
+
+    # ----- ПРИВАТНЫЕ МЕТОДЫ
 
     def __registr_node_into_network(self, node_name: str, net_name: str) -> None:
         if self.__net_registry.get(node_name, None) is None:

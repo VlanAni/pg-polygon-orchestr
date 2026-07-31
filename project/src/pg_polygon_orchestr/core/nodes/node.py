@@ -3,6 +3,7 @@
 from abc import ABC, abstractmethod
 
 from .exec_result import ExecResult
+from ..configs.node_config import NodeConfig
 
 
 class Node(ABC):
@@ -18,5 +19,9 @@ class Node(ABC):
         pass
 
     @abstractmethod
-    def exec(self, command: str) -> ExecResult:
+    def exec(self, command: str) -> ExecResult | None:
+        pass
+
+    @abstractmethod
+    def update_configuration(self, new_config: NodeConfig) -> None:
         pass

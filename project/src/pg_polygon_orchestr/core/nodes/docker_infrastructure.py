@@ -16,32 +16,15 @@ class DockerInfrastructure(Infrastructure):
         networks: list[docker_networks.Network] | None = None,
     ) -> None:
         self.__nodes = self.__init_nodes_dict(nodes)
-        self.__usable = True
+        self.__alive = True
         self.__networks = (
             {} if networks is None else self.__init_network_dict(networks=networks)
         )
 
-    def __init_nodes_dict(self, nodes: list[DockerNode]) -> dict[str, DockerNode]:
-        nodes_dict: dict[str, DockerNode] = dict()
-
-        for node in nodes:
-            nodes_dict[node.get_name()] = node
-
-        return nodes_dict
-
-    def __init_network_dict(
-        self, networks: list[docker_networks.Network]
-    ) -> dict[str, docker_networks.Network]:
-        net_dict: dict[str, docker_networks.Network] = dict()
-
-        for net_obj in networks:
-            net_dict[net_obj.name] = net_obj  # type: ignore
-
-        return net_dict
-
+    # интерфейсные методы
     def start(self) -> None:
 
-        if not (self.__usable):
+        if not (self.__alive):
             return
 
         node_names = list(self.__nodes.keys())
@@ -75,7 +58,7 @@ class DockerInfrastructure(Infrastructure):
                 ) from err
 
     def stop(self, timeout: int) -> None:
-        if not (self.__usable):
+        if not (self.__alive):
             return
 
         for node_name in self.__nodes.keys():
@@ -89,7 +72,7 @@ class DockerInfrastructure(Infrastructure):
                 )
 
     def exec_command_on_node(self, node_name: str, command: str) -> ExecResult | None:
-        if not (self.__usable):
+        if not (self.__alive):
             return
 
         node = self.__nodes.get(node_name, None)
@@ -115,17 +98,8 @@ class DockerInfrastructure(Infrastructure):
                 f"failed to execute a command because of API error: {err}"
             )
 
-    def mask_as_unusable(self) -> None:
-        self.__usable = False
-
-    def get_usable(self) -> bool:
-        return self.__usable
-
-    def get_nodes(self) -> dict[str, DockerNode]:
-        return self.__nodes.copy()
-
     def update_configuration(self, new_config: NodeConfig, node_name: str) -> None:
-        if not (self.__usable):
+        if not (self.__alive):
             return
 
         node = self.__nodes.get(node_name, None)
@@ -157,6 +131,7 @@ class DockerInfrastructure(Infrastructure):
                 f"failed to update {node_name}'s configuration"
             ) from err
 
+    # геттеры
     def get_network_ip_addr(self, net_name: str) -> str | None:
 
         net_obj = self.__networks.get(net_name, None)
@@ -179,3 +154,35 @@ class DockerInfrastructure(Infrastructure):
             return None
 
         return node.get_node_network_ip(net_name=net_name)
+
+    def is_alive(self) -> bool:
+        return self.__alive
+
+    def get_nodes(self) -> dict[str, DockerNode]:
+        return self.__nodes.copy()
+
+    def get_node_object(self, node_name: str) -> DockerNode | None:
+        return self.__nodes.get(node_name, None)
+
+    # приватные методы
+    def __init_nodes_dict(self, nodes: list[DockerNode]) -> dict[str, DockerNode]:
+        nodes_dict: dict[str, DockerNode] = dict()
+
+        for node in nodes:
+            nodes_dict[node.get_name()] = node
+
+        return nodes_dict
+
+    def __init_network_dict(
+        self, networks: list[docker_networks.Network]
+    ) -> dict[str, docker_networks.Network]:
+        net_dict: dict[str, docker_networks.Network] = dict()
+
+        for net_obj in networks:
+            net_dict[net_obj.name] = net_obj  # type: ignore
+
+        return net_dict
+
+    # сеттеры
+    def mark_as_not_alive(self) -> None:
+        self.__alive = False

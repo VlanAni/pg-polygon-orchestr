@@ -24,6 +24,13 @@ class CannotCreateDockerNetwork(Exception):
     pass
 
 
+# создание томов
+
+
+class CannotCreateDockerVolume(Exception):
+    pass
+
+
 # ислючения функции destroy_everything
 
 
@@ -36,6 +43,10 @@ class CannotDestroyTheImageException(Exception):
 
 
 class CannotDestroyTheNetwork(Exception):
+    pass
+
+
+class CannotDestroyTheVolume(Exception):
     pass
 
 

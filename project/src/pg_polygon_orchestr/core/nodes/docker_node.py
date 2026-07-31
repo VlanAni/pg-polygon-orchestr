@@ -9,6 +9,7 @@ import docker.models.containers as docker_containers
 import sys
 
 from ..configs.node_config import NodeConfig
+from ..configs.volume_desc import VolumeDesc
 
 from ..logger_config.info_filter import INFO_Filter
 
@@ -54,6 +55,7 @@ class DockerNode(Node):
         name: str,
         default_net: bool,
         networks: list[docker_networks.Network] | None = None,
+        volumes: list[VolumeDesc] | None = None,
     ) -> None:
         self.__my_session = docker_client
         self.__my_image = image
@@ -62,11 +64,16 @@ class DockerNode(Node):
         self.__my_networks: list[docker_networks.Network] = (
             networks.copy() if networks is not None else []
         )
+        self.__my_volumes: list[VolumeDesc] = (
+            volumes.copy() if volumes is not None else []
+        )
         self.__default_net = default_net
         self.__name = name
         self.__cpu_period_default = 100000
         self.__connected_networks = 0  # этот параметр используется для отключения от сетей во время уничтожения (может быть подключены не все сети)
         self.__configure_logger()
+
+    # ----- Интерфейсные методы
 
     # запуск контейнера (первый запуск - из образа + подключаемся к сети)
     def start(self) -> None:
@@ -100,8 +107,14 @@ class DockerNode(Node):
                         )
                     ),
                     cap_add=(
-                        ["NET_ADMIN"] if self.__my_config.docker_net_admin_cap else None
+                        ["NET_ADMIN"] if self.__my_config.net_config_rights else None
                     ),
+                    sysctls=(
+                        {"net.ipv4.ip_forward": "1"}
+                        if self.__my_config.ip_forwarding_on_node
+                        else None
+                    ),
+                    volumes=self.__create_volume_mount_map(),
                 )
 
                 self.my_logger.info(
@@ -256,6 +269,8 @@ class DockerNode(Node):
                 f"server returns an error: {err}"
             ) from err
 
+    # ----- Docker-специфичные методы
+
     # мягкое уничтожение контейнера
     def soft_destroy_container(self) -> None:
         if self.__my_container is not None:
@@ -285,7 +300,7 @@ class DockerNode(Node):
                         if not (self.__connected_networks):
                             break
 
-                self.__my_container.remove(v=True)
+                self.__my_container.remove()
             except docker.errors.APIError as err:
 
                 self.my_logger.error(f"server returns an error {err}")
@@ -316,7 +331,7 @@ class DockerNode(Node):
                 if not (self.__connected_networks):
                     break
 
-            self.__my_container.remove(v=True, force=True)
+            self.__my_container.remove(force=True)
         except docker.errors.APIError as err:
             self.my_logger.error(
                 f"cannot force delete container {self.__my_container.name}"
@@ -332,33 +347,8 @@ class DockerNode(Node):
 
         self.__my_container = None
 
-    # приватный метод ПОДКЛЮЧЕНИЯ к сети
-    def __connect_to_network(self, net_obj: docker_networks.Network) -> None:
-        if self.__my_container is None:
-            raise NoDockerContainerToPerformOperation("no any docker container")
+    # ----- ГЕТТЕРЫ
 
-        try:
-            net_obj.connect(self.__my_container)  # type: ignore
-        except docker.errors.APIError as err:
-            raise CannotConnectToTheNetwork(
-                f"conrainer {self.__my_container.name} cannot connect to the network {net_obj.name} because of this error: {err}"
-            ) from err
-
-    # приватный метод ОТКЛЮЧЕНИЯ от сети
-    def __disconnect_from_network(
-        self, net_obj: docker_networks.Network, force: bool = False
-    ) -> None:
-        if self.__my_container is None:
-            raise NoDockerContainerToPerformOperation("no any docker container")
-
-        try:
-            net_obj.disconnect(self.__my_container, force=force)
-        except docker.errors.APIError as err:
-            raise CannotDisconnectFromTheNetwork(
-                f"the container {self.__my_container.name} cannot disconnect from the network {net_obj.name}: {err}"
-            ) from err
-
-    # ГЕТТЕРЫ для ноды
     def get_name(self) -> str:
         return self.__name
 
@@ -387,3 +377,45 @@ class DockerNode(Node):
         return self.__my_container.attrs["NetworkSettings"]["Networks"][net_name][
             "IPAddress"
         ]
+
+    # ----- ПРИВАТНЫЕ МЕТОДЫ
+
+    # подключение к сети
+    def __connect_to_network(self, net_obj: docker_networks.Network) -> None:
+        if self.__my_container is None:
+            raise NoDockerContainerToPerformOperation("no any docker container")
+
+        try:
+            net_obj.connect(self.__my_container)  # type: ignore
+        except docker.errors.APIError as err:
+            raise CannotConnectToTheNetwork(
+                f"conrainer {self.__my_container.name} cannot connect to the network {net_obj.name} because of this error: {err}"
+            ) from err
+
+    # отключение от сети
+    def __disconnect_from_network(
+        self, net_obj: docker_networks.Network, force: bool = False
+    ) -> None:
+        if self.__my_container is None:
+            raise NoDockerContainerToPerformOperation("no any docker container")
+
+        try:
+            net_obj.disconnect(self.__my_container, force=force)
+        except docker.errors.APIError as err:
+            raise CannotDisconnectFromTheNetwork(
+                f"the container {self.__my_container.name} cannot disconnect from the network {net_obj.name}: {err}"
+            ) from err
+
+    def __create_volume_mount_map(self) -> dict[str, dict[str, str]] | None:
+        if not self.__my_volumes:
+            return None
+
+        mount_map: dict[str, dict[str, str]] = dict()
+
+        for volume_desc in self.__my_volumes:
+            mount_map[volume_desc.volume_obj.name] = {
+                "bind": volume_desc.mount_path,
+                "mode": "ro" if volume_desc.read_only else "rw",
+            }
+
+        return mount_map

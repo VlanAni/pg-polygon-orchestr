@@ -1,5 +1,6 @@
 from ..configs.node_config import NodeConfig
 from ..configs.infra_config import InfConfig
+from ..configs.volume_desc import VolumeDesc
 from .deployer import Deployer
 from ..nodes.docker_infrastructure import DockerInfrastructure
 from ..nodes.docker_node import DockerNode
@@ -55,10 +56,12 @@ class DockerDeployer(Deployer):
         self.__networks: dict[str, docker_networks.Network] = (
             dict()
         )  # реестр созданных сетей
+        self.__volume_registry: dict[str, list[VolumeDesc]] = dict()
         self.__docker_session = None  # состояние сессии
         self.__configure_logger()
 
-    # деплоинг отдельной ноду
+    # ----- ИНТЕРФЕЙСНЫЕ МЕТОДЫ
+
     def deploy_node(
         self, name: str, config: NodeConfig, nets: list[str] | None = None
     ) -> DockerNode:
@@ -128,6 +131,8 @@ class DockerDeployer(Deployer):
 
         self.__images_ids.add(image.id)  # type: ignore
 
+        volumes = self.__volume_registry.get(name, None)
+
         docker_node = DockerNode(
             docker_client=self.__docker_session,
             image=image,
@@ -135,6 +140,7 @@ class DockerDeployer(Deployer):
             name=name,
             default_net=config.connect_to_docker_default_net,
             networks=networks,
+            volumes=volumes,
         )
 
         self.logger.info("new docker-node created")
@@ -143,7 +149,6 @@ class DockerDeployer(Deployer):
 
         return docker_node
 
-    # функция деплоинга инфраструктуры
     def deploy_infrastructure(self, inf_config: InfConfig) -> DockerInfrastructure:
 
         if self.__docker_session is None:
@@ -167,6 +172,12 @@ class DockerDeployer(Deployer):
             raise common_exceptions.ThereIsNoDataForThisKeyException(
                 f"cannot find data: {err}"
             ) from err
+
+        try:
+            self.__create_volumes(inf_config=inf_config)
+        except docker_exceptions.CannotCreateDockerVolume as err:
+
+            raise common_exceptions.CannotDeployInfra from err
 
         nodes: list[DockerNode] = []
 
@@ -226,7 +237,6 @@ class DockerDeployer(Deployer):
 
         return inf
 
-    # метод уничтожающий все контейнеры, сети и образы
     def destroy_everything(self) -> None:
         self.logger.info("DESTROYING")
 
@@ -275,6 +285,17 @@ class DockerDeployer(Deployer):
                     raise docker_exceptions.CannotDestroyTheNetwork(
                         f"cannot remove the network {net_name}: {err}"
                     ) from err
+
+            for volumes_list in self.__volume_registry.values():
+                for volume_desc in volumes_list:
+                    try:
+                        if volume_desc.delete_on_destroy:
+                            volume_desc.volume_obj.remove()
+                    except docker.errors.APIError as err:
+                        raise docker_exceptions.CannotDestroyTheVolume(
+                            f"cannot destroy the volume {volume_desc.volume_obj.name}: {err}"
+                        ) from err
+
         finally:
             self.__docker_session.close()
             self.__docker_session = None
@@ -283,12 +304,15 @@ class DockerDeployer(Deployer):
             self.__images_ids.clear()
             self.__networks.clear()
 
+            self.__volume_registry.clear()
+
             for inf in self.__infrastructures:
-                inf.mask_as_unusable()
+                inf.mark_as_not_alive()
 
         self.logger.info("DESTROYING DONE")
 
-    # ГЕТТЕРЫ
+    # ----- ГЕТТЕРЫ
+
     def get_nodes(self) -> dict[str, DockerNode]:
         return self.__docker_nodes.copy()
 
@@ -298,7 +322,6 @@ class DockerDeployer(Deployer):
     def get_infrastructures(self) -> list[DockerInfrastructure]:
         return self.__infrastructures
 
-    # функция создания сетей (возвращает айдишники сетей)
     def __create_networks(self, inf_config: InfConfig) -> None:
 
         if (
@@ -327,3 +350,37 @@ class DockerDeployer(Deployer):
                 raise docker_exceptions.CannotCreateDockerNetwork(
                     f"cannot create docker network {net_name}: {err}"
                 )
+
+    def __create_volumes(self, inf_config: InfConfig) -> None:
+
+        if (
+            self.__docker_session is None
+        ):  # такая ситуация невозможна, потому что функция вызывается только после создания сети. Но проверка нужна для типобезопасности
+            return
+
+        volume_configs = inf_config.get_volumes()
+
+        for config in volume_configs:
+            try:
+                volume_obj = self.__docker_session.volumes.create(  # type: ignore
+                    name=config.name(),
+                    driver=config.driver(),
+                    driver_opts=config.options(),
+                )
+
+                desc = VolumeDesc(
+                    volume_obj=volume_obj,
+                    mount_path=config.mount_path(),
+                    read_only=config.read_only(),
+                    delete_on_destroy=config.delete_status(),
+                )
+
+                node = config.owner_name()
+                node_volumes = self.__volume_registry.get(node, None)
+
+                if node_volumes is None:
+                    self.__volume_registry[node] = [desc]
+                else:
+                    self.__volume_registry[node].append(desc)
+            except docker.errors.APIError as err:
+                raise docker_exceptions.CannotCreateDockerVolume() from err

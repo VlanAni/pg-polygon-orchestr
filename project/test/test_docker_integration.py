@@ -8,6 +8,7 @@ import pytest
 from pg_polygon_orchestr.core.configs.node_config import NodeConfig
 from pg_polygon_orchestr.core.configs.net_config import NetConfig
 from pg_polygon_orchestr.core.configs.infra_config import InfConfig
+from pg_polygon_orchestr.core.configs.docker_volume_config import VolumeConfig
 from pg_polygon_orchestr.core.deployers.docker_deployer import DockerDeployer
 
 from pg_polygon_orchestr.core.exception import docker_exceptions
@@ -155,7 +156,7 @@ class TestDockerDeployerIntegration:
             client.close()
 
         # проверяем что инфраструктура пригода к использованию
-        assert infrasturcture.get_usable()
+        assert infrasturcture.is_alive()
 
         # останавливаем работу инфраструктуры
         infrasturcture.stop(0)
@@ -179,7 +180,7 @@ class TestDockerDeployerIntegration:
         assert len(our_containers) == 0
         assert len(deployer.get_images()) == 0
         assert len(deployer.get_nodes()) == 0
-        assert not (infrasturcture.get_usable())
+        assert not (infrasturcture.is_alive())
 
     def test_3__node_update_configuration(self, deployer: DockerDeployer):
         try:
@@ -507,8 +508,9 @@ class TestDockerDeployerIntegration:
             ram_limit="512m",
             disk_limit="",
             os_name="ubuntu:latest",
-            docker_net_admin_cap=True,
+            net_config_rights=True,
             connect_to_docker_default_net=True,
+            ip_forwarding_on_node=True,
         )
 
         inf_config.put_node_config("node_a", config=node_config)
@@ -536,14 +538,10 @@ class TestDockerDeployerIntegration:
         assert self.__check_exit_code(package_update, 0, True)
 
         package_installation = inf.exec_command_on_node(
-            node_name="node_a", command="apt-get install -y iproute2 iputils-ping"
+            node_name="node_a",
+            command="apt-get install -y iproute2 iputils-ping traceroute",
         )
         assert self.__check_exit_code(package_installation, 0, True)
-
-        node_b_as_router = inf.exec_command_on_node(
-            node_name="node_b", command="sysctl -w net.ipv4.ip_forward=1"
-        )
-        assert self.__check_exit_code(node_b_as_router, 0, True)
 
         net_2_ip = inf.get_network_ip_addr("2")
         assert net_2_ip is not None
@@ -561,6 +559,79 @@ class TestDockerDeployerIntegration:
 
         a_ping_c = inf.exec_command_on_node("node_a", f"ping -c 1 {node_c_ip_net_2}")
         assert self.__check_exit_code(a_ping_c, 0, True)
+
+        a_traceroute_c = inf.exec_command_on_node(
+            "node_a", f"traceroute {node_c_ip_net_2}"
+        )
+        assert self.__check_exit_code(a_traceroute_c, 0, True)
+        assert node_b_ip_net_1 in a_traceroute_c.stdout  # type: ignore
+
+        deployer.destroy_everything()
+
+    def test_10__volume_mount_persistency(self, deployer: DockerDeployer):
+
+        inf_config = InfConfig()
+
+        node_config = NodeConfig(cpu_limit=1, ram_limit="512m", os_name="ubuntu:latest")
+
+        assert inf_config.put_node_config(node_name="node", config=node_config)
+
+        volume_conf = VolumeConfig(
+            name="test_volume",
+            owner_name="node",
+            driver="local",
+            mount_path="/app/mounted_data",
+            read_only=False,
+            delete_on_destroying=True,
+        )
+
+        assert inf_config.put_volume_config(config=volume_conf)
+
+        inf = deployer.deploy_infrastructure(inf_config=inf_config)
+
+        inf.start()
+
+        node = inf.get_nodes()["node"]
+
+        result = node.exec("sh -c 'echo test > /app/mounted_data/file.txt'")
+        assert self.__check_exit_code(result, 0, True)
+
+        node.stop(1)
+        node.start()
+
+        result = node.exec("cat /app/mounted_data/file.txt")
+        assert self.__check_exit_code(result, 0, True)
+        assert "test" in result.stdout
+
+        deployer.destroy_everything()
+
+    def test_11_read_only_volume(self, deployer: DockerDeployer):
+
+        inf_config = InfConfig()
+
+        node_config = NodeConfig(cpu_limit=1, ram_limit="512m", os_name="ubuntu:latest")
+
+        assert inf_config.put_node_config(node_name="node", config=node_config)
+
+        volume_conf = VolumeConfig(
+            name="test_volume",
+            owner_name="node",
+            driver="local",
+            mount_path="/app/mounted_data",
+            read_only=True,
+            delete_on_destroying=True,
+        )
+
+        assert inf_config.put_volume_config(config=volume_conf)
+
+        inf = deployer.deploy_infrastructure(inf_config=inf_config)
+
+        inf.start()
+
+        node = inf.get_nodes()["node"]
+
+        result = node.exec("sh -c 'echo test > /app/mounted_data/file.txt'")
+        assert self.__check_exit_code(result, 0, False)
 
         deployer.destroy_everything()
 

@@ -10,6 +10,10 @@ class NetConfigIncludeNotConfiguredNodeException(Exception):
     pass
 
 
+class DockerVolumeConfigIncludeNotConfiguredNode(Exception):
+    pass
+
+
 # ----- INFRA
 
 
@@ -37,6 +41,10 @@ class FailedToExecuteCommand(Exception):
 
 
 class CannotDeployNodeException(Exception):
+    pass
+
+
+class CannotDeployInfra(Exception):
     pass
 
 
