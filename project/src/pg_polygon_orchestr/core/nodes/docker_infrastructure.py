@@ -1,72 +1,53 @@
 from .infrastructure import Infrastructure
 from .docker_node import DockerNode
-from ..configs.node_config import NodeConfig
+
+from docker.models import networks as docker_networks
 
 
 class DockerInfrastructure(Infrastructure):
 
-    def __init__(self, nodes: list[DockerNode]) -> None:
-        self.__nodes = self.__init_nodes_dict(nodes)
-        self.__usable = True
+    def __init__(
+        self,
+        nodes: dict[str, DockerNode],
+        networks: dict[str, docker_networks.Network] | None = None,
+    ) -> None:
+        self.__nodes = nodes.copy()
+        self.__alive = True
+        self.__networks = networks.copy() if networks else {}
 
-    def __init_nodes_dict(self, nodes: list[DockerNode]) -> dict[str, DockerNode]:
-        nodes_dict: dict[str, DockerNode] = dict()
+    # геттеры
+    def get_network_ip_addr(self, net_name: str) -> str | None:
 
-        for node in nodes:
-            nodes_dict[node.get_name()] = node
+        net_obj = self.__networks.get(net_name, None)
 
-        return nodes_dict
+        if net_obj is None:
+            return None
 
-    def start(self) -> bool:
-        started = 0
+        net_obj.reload()
 
-        if not (self.__usable):
-            return False
+        if net_obj.attrs["IPAM"]["Config"] is None or []:
+            return None
 
-        nodes = list(self.__nodes.values())
+        return net_obj.attrs["IPAM"]["Config"][0]["Subnet"]
 
-        for node in nodes:
-            res = node.start()
-
-            if not (res):
-
-                for i in range(0, started):
-                    nodes[i].stop(0)
-
-                return False
-            else:
-                started += 1
-
-        return True
-
-    def stop(self, timeout: int) -> bool:
-        if not (self.__usable):
-            return False
-
-        for node in self.__nodes.values():
-            res = node.stop(timeout=timeout)
-
-            if not (res):
-                return False
-
-        return True
-
-    def mask_as_unusable(self) -> None:
-        self.__usable = False
-
-    def get_usable(self) -> bool:
-        return self.__usable
-
-    def get_nodes(self) -> dict[str, DockerNode]:
-        return self.__nodes.copy()
-
-    def update_configuration(self, new_config: NodeConfig, node_name: str) -> bool:
-        if not (self.__usable):
-            return False
+    def get_node_ip_in_network(self, node_name: str, net_name: str) -> str | None:
 
         node = self.__nodes.get(node_name, None)
 
         if node is None:
-            return False
-        else:
-            return node.update_configuration(new_config=new_config)
+            return None
+
+        return node.get_node_network_ip(net_name=net_name)
+
+    def is_alive(self) -> bool:
+        return self.__alive
+
+    def get_nodes(self) -> dict[str, DockerNode]:
+        return self.__nodes.copy()
+
+    def get_node_object(self, node_name: str) -> DockerNode | None:
+        return self.__nodes.get(node_name, None)
+
+    # сеттеры
+    def mark_as_not_alive(self) -> None:
+        self.__alive = False

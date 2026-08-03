@@ -4,9 +4,9 @@ from abc import ABC, abstractmethod
 class Infrastructure(ABC):
 
     @abstractmethod
-    def start(self) -> bool:
+    def get_network_ip_addr(self, net_name: str) -> str | None:
         pass
 
     @abstractmethod
-    def stop(self, timeout: int) -> bool:
+    def is_alive(self) -> bool:
         pass
