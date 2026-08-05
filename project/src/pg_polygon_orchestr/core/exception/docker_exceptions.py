@@ -1,99 +1,76 @@
-# ----- DOCKER_DEPLOYER
+from . import common_exceptions
+
+# ------ DEPLOYING ERRORS
 
 
-class DeploymentError(Exception):
+class DockerClearError(common_exceptions.ClearError):
     pass
+
+
+class DockerDeployError(common_exceptions.DeployError):
+    pass
+
+
+class DockerRemoveError(common_exceptions.RemoveError):
+    pass
+
+
+# ------ NETWORK ERROR
+
+
+class ConnectToDockerNetError(common_exceptions.ConnectToNetError):
+    pass
+
+
+class DisconnectFromDockerNetError(common_exceptions.DisconnectFromNetError):
+    pass
+
+
+class GetDockerNetIpError(common_exceptions.GetNetIpError):
+    pass
+
+
+class GetContainerIpError(common_exceptions.GetNodeIpError):
+    pass
+
+
+# ------ CONTAINER ERRORS
+
+
+class DockerContStartError(common_exceptions.StartNodeError):
+    pass
+
+
+class DockerContStopError(common_exceptions.StopNodeError):
+    pass
+
+
+class ExecOnContainerError(common_exceptions.ExecCommandError):
+    pass
+
+
+class UpdateContainerConfError(common_exceptions.UpdateConfError):
+    pass
+
+
+class ContainerUnexpectedlyRunning(common_exceptions.StartNodeError):
+    pass
+
+
+class ContainerUnexpectedlyStopped(common_exceptions.StopNodeError):
+    pass
+
+
+# ------ ОШИБКИ ВНУТРЕННЕЙ РАБОТЫ ДЕЛПОЕРА
 
 
 class ImageBuildError(Exception):
     pass
 
 
-class DockerConnectionError(Exception):
+class ResourceCreationError(Exception):
     pass
 
 
-class CreateNetworkError(Exception):
+class FailedToDeleteAnImage(Exception):
     pass
-
-
-# исключения приватной функции создания сетей
-
-
-class CannotCreateDockerNetwork(Exception):
-    pass
-
-
-# создание томов
-
-
-class CannotCreateDockerVolume(Exception):
-    pass
-
-
-# ислючения функции destroy_everything
-
-
-class CannotDestroyTheNodeException(Exception):
-    pass
-
-
-class CannotDestroyTheImageException(Exception):
-    pass
-
-
-class CannotDestroyTheNetwork(Exception):
-    pass
-
-
-class CannotDestroyTheVolume(Exception):
-    pass
-
-
-# ----- DOCKER_NODE
-
-
-# исключения которые выбрасывают функции уровня DockerNode
-class DisonnectFunctionError(Exception):
-    pass
-
-
-class DockerNodeAPIErrorOrccursException(Exception):
-    pass
-
-
-class ConnectFunctionError(Exception):
-    pass
-
-
-class CannotExecACommandOnNotRunningContainer(Exception):
-    pass
-
-
-class CannotFindImageToRunAContainer(Exception):
-    pass
-
-
-class ContainerErrorDuringRunning(Exception):
-    pass
-
-
-class NoDockerContainerToPerformOperation(Exception):
-    pass
-
-
-# Исключения принадлежащие приватным функциям подключения и отсоединения
-class CannotConnectToTheNetwork(Exception):
-    pass
-
-
-class CannotDisconnectFromTheNetwork(Exception):
-    pass
-
-
-# исключения специфичные для Update() у DockerNode
-class UpdateConfigurationCannotBePerfomedIfCpuLimitNotPositive(Exception):
-    pass
-
-
-# ----- DOCKER_INFRASTRUCTURE

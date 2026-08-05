@@ -13,7 +13,7 @@ from pg_polygon_orchestr.core.deployers.docker_deployer import DockerDeployer
 
 from pg_polygon_orchestr.core.exception import common_exceptions
 
-from pg_polygon_orchestr.core.nodes.exec_result import ExecResult
+from pg_polygon_orchestr.core.interfaces.exec_result import ExecResult
 
 pytestmark = pytest.mark.integration
 
