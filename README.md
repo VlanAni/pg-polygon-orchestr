@@ -1,6 +1,4 @@
 # pg-polygon-orchestr
-Postgres Pro Summer School project. The library for controlling containers, VMs and other infrastructure
+`/knowledge_base` - заметки, сделанные при разработке проекта 
 
-# Folders
-
-- `knowledge_base` - the folder with .md files with notes and others
+`/project` - папка python-проект
