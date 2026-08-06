@@ -1,71 +1,85 @@
-class NodeWithThatNameAlreadyExistsException(Exception):
+# ------ INFRASTRUCTURE MANAGING ERRORS
+
+
+class DeployError(Exception):
     pass
 
 
-class ThereIsNoDataForThisKeyException(Exception):
+class ClearError(Exception):
     pass
 
 
-class NetConfigIncludeNotConfiguredNodeException(Exception):
+class RemoveError(Exception):
     pass
 
 
-class DockerVolumeConfigIncludeNotConfiguredNode(Exception):
+# ------ NETWORK ERRORS
+
+
+class ConnectToNetError(Exception):
     pass
 
 
-# ----- INFRA
-
-
-class FailedToStartNodeFromInfrastructureException(Exception):
+class DisconnectFromNetError(Exception):
     pass
 
 
-class FailedToStopInfrastructure(Exception):
+class GetNetIpError(Exception):
     pass
 
 
-class FailedToFindANodeWithByItsName(Exception):
+class GetNodeIpError(Exception):
     pass
 
 
-class FailedToExecuteCommand(Exception):
+# ------ NODE ERRORS
+
+
+class StartNodeError(Exception):
     pass
 
 
-# ----- DEPLOYER
-
-
-class CannotDeployNodeException(Exception):
+class ExecCommandError(Exception):
     pass
 
 
-class CannotDeployInfra(Exception):
+class UpdateConfError(Exception):
     pass
 
 
-# ----- NODE_LINK
-
-
-class NodeIsNotDeployer(Exception):
+class StopNodeError(Exception):
     pass
 
 
-class FailedToStartNode(Exception):
+# ------ SNAPSHOT ERRORS
+
+
+class MakeSnapshotError(Exception):
     pass
 
 
-class FailedToStopNode(Exception):
+class BuildFromSnapshotError(Exception):
     pass
 
 
-class FailedToExecCommand(Exception):
+class WriteStepError(Exception):
     pass
 
 
-class FailedToUpdateConfiguration(Exception):
+class BuildFromStepsError(Exception):
     pass
 
 
-class FailedToGetIP(Exception):
+# ------ STATE CHECK ERRORS
+
+
+class EntityIsRemovedException(Exception):
+    pass
+
+
+class EntityIsAlreadyDeployed(Exception):
+    pass
+
+
+class EntityIsNotDeployed(Exception):
     pass

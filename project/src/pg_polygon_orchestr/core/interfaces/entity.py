@@ -1,0 +1,26 @@
+from abc import ABC, abstractmethod
+
+from .types import Type
+
+
+class Entity(ABC):
+
+    @abstractmethod
+    def deploy(self):
+        pass
+
+    @abstractmethod
+    def clear(self):
+        pass
+
+    @abstractmethod
+    def remove(self):
+        pass
+
+    @abstractmethod
+    def get_type(self) -> Type:
+        pass
+
+    @abstractmethod
+    def get_name(self) -> str:
+        pass
