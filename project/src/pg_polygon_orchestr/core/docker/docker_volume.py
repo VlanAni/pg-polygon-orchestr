@@ -1,19 +1,22 @@
 from ..interfaces import volume, entity_state, types
 from ..configs.volume_config import VolumeConfig
 from ..exception import docker_exceptions, common_exceptions
-from . import docker_deployer
+from . import docker_session
 
 import docker.errors as dockerapi_errors
 
 
 class DockerVolume(volume.Volume):
     def __init__(
-        self, name: str, config: VolumeConfig, deployer: docker_deployer.DockerDeployer
+        self,
+        name: str,
+        config: VolumeConfig,
+        session: docker_session.DockerClientSession,
     ) -> None:
         self.__name = name
         self.__config = config
         self.__state = entity_state.EntityState.NOT_DEPLOYED
-        self.__deployer = deployer
+        self.__shared_docker_session = session
         self.__volume = None
 
     # ------ интерфейсные методы
@@ -62,8 +65,8 @@ class DockerVolume(volume.Volume):
 
     def __deploy(self) -> None:
         try:
-            volume = self.__deployer.create_volume(  # type: ignore
-                who_ask=self, volume_config=self.__config  # type: ignore
+            volume = self.__shared_docker_session.ask_to_create_volume(  # type: ignore
+                volume_name=self.__name, volume_config=self.__config  # type: ignore
             )
         except docker_exceptions.ResourceCreationError as err:
             raise docker_exceptions.DockerDeployError(
@@ -98,12 +101,9 @@ class DockerVolume(volume.Volume):
                     f"failed to force remove a docker volume {self.__name}"
                 ) from err
 
-        self.__deployer.remove_volume(who_ask=self)  # type: ignore
-
         self.__state = entity_state.EntityState.REMOVED
         self.__volume = None
         self.__config = None
-        self.__deployer = None
 
     # ------ приватные методы
 

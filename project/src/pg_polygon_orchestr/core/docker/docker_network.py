@@ -1,6 +1,6 @@
 from ..interfaces import network, entity_state, types
 from ..configs import net_config
-from . import docker_deployer, docker_node
+from . import docker_session, docker_node
 from ..exception import docker_exceptions, common_exceptions
 
 import docker.errors
@@ -12,11 +12,11 @@ class DockerNetwork(network.Network):
         self,
         name: str,
         config: net_config.NetConfig,
-        deployer: docker_deployer.DockerDeployer,
+        session: docker_session.DockerClientSession,
     ):
         self.__name = name
         self.__config = config
-        self.__deployer = deployer
+        self.__shared_docker_session = session
         self.__state = entity_state.EntityState.NOT_DEPLOYED
         self.__network = None
 
@@ -125,7 +125,7 @@ class DockerNetwork(network.Network):
 
     def __deploy(self) -> None:
         try:
-            network = self.__deployer.create_network(who_ask=self, config=self.__config)  # type: ignore
+            network = self.__shared_docker_session.ask_to_create_network(name=self.__name, config=self.__config)  # type: ignore
         except docker_exceptions.ResourceCreationError as err:
             raise docker_exceptions.DockerDeployError(
                 f"failed to create a docker network {self.__name}"
@@ -159,11 +159,8 @@ class DockerNetwork(network.Network):
                     f"cannot remove the network {self.__name}"
                 ) from err
 
-        self.__deployer.remove_network(who_ask=self)  # type: ignore
-
         self.__network = None
         self.__state = entity_state.EntityState.REMOVED
-        self.__deployer = None
         self.__config = None
 
     def __connect_node(self, node: network.Node) -> None:
@@ -172,17 +169,6 @@ class DockerNetwork(network.Network):
         else:
             raise docker_exceptions.ConnectToDockerNetError(
                 f"the node {node.get_name()} is not a docker node"
-            )
-
-        known = self.__deployer.check_node_is_known(who_ask=self, node=d_node)  # type: ignore
-
-        if known is None:
-            raise docker_exceptions.ConnectToDockerNetError(
-                f"the network {self.__name} is not registred"
-            )
-        if not known:
-            raise docker_exceptions.ConnectToDockerNetError(
-                f"the node {d_node.get_name()} is not registred"
             )
 
         container_id = d_node.share_container_id()
@@ -207,17 +193,6 @@ class DockerNetwork(network.Network):
                 f"the node {node.get_name()} is not a docker node"
             )
 
-        known = self.__deployer.check_node_is_known(who_ask=self, node=d_node)  # type: ignore
-
-        if known is None:
-            raise docker_exceptions.ConnectToDockerNetError(
-                f"the network {self.__name} is not registred"
-            )
-        if not known:
-            raise docker_exceptions.ConnectToDockerNetError(
-                f"the node {d_node.get_name()} is not registred"
-            )
-
         container_id = d_node.share_container_id()
 
         if container_id is None:
@@ -238,17 +213,6 @@ class DockerNetwork(network.Network):
         else:
             raise docker_exceptions.GetContainerIpError(
                 f"the node {node.get_name()} is not a docker node"
-            )
-
-        known = self.__deployer.check_node_is_known(who_ask=self, node=d_node)  # type: ignore
-
-        if known is None:
-            raise docker_exceptions.GetContainerIpError(
-                f"the network {self.__name} is not registred"
-            )
-        if not known:
-            raise docker_exceptions.GetContainerIpError(
-                f"the node {d_node.get_name()} is not registred"
             )
 
         container_id = d_node.share_container_id()

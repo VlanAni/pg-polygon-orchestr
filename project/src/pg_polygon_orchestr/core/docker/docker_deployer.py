@@ -1,17 +1,11 @@
-import docker
-import docker.errors
-import docker.models.networks as dockerapi_networks
-import docker.models.images as dockerapi_images
-import docker.models.containers as dockerapi_containers
-import docker.models.volumes as dockerapi_volumes
-from pathlib import Path
+from collections.abc import Mapping
 
 from ..exception import docker_exceptions
 from ..exception import common_exceptions
 from ..configs import node_config, volume_config, net_config
-from ..interfaces import deployer, mount_config, node
+from ..interfaces import deployer, node
 
-from . import docker_node, docker_volume, docker_network
+from . import docker_node, docker_volume, docker_network, docker_session
 
 
 class DockerDeployer(deployer.Deployer):
@@ -19,216 +13,93 @@ class DockerDeployer(deployer.Deployer):
         self.__docker_nodes: dict[str, docker_node.DockerNode] = dict()
         self.__docker_networks: dict[str, docker_network.DockerNetwork] = dict()
         self.__docker_volumes: dict[str, docker_volume.DockerVolume] = dict()
-        self.__docker_session = None
-        self.__default_bridge: dockerapi_networks.Network | None = None
+        self.__docker_session: docker_session.DockerClientSession = (
+            docker_session.DockerClientSession()
+        )
 
-    # ----- ИНТЕРФЕЙСНЫЕ МЕТОДЫ
+    # ----- интерфейсные методы
+
+    def put_node_config(
+        self, name: str, config: node_config.NodeConfig
+    ) -> deployer.Node:
+        search_result = self.__docker_nodes.get(name, None)
+
+        if search_result is not None:
+            return search_result
+
+        d_node = docker_node.DockerNode(
+            name=name, config=config, session=self.__docker_session
+        )
+
+        self.__docker_nodes[name] = d_node
+
+        return d_node
+
+    def put_network_config(
+        self, name: str, config: net_config.NetConfig
+    ) -> deployer.Network:
+        search_result = self.__docker_networks.get(name, None)
+
+        if search_result is not None:
+            return search_result
+
+        d_net = docker_network.DockerNetwork(
+            name=name, config=config, session=self.__docker_session
+        )
+
+        self.__docker_networks[name] = d_net
+
+        return d_net
+
+    def put_volume_config(
+        self, name: str, config: volume_config.VolumeConfig
+    ) -> deployer.Volume:
+        search_result = self.__docker_volumes.get(name, None)
+
+        if search_result is not None:
+            return search_result
+
+        d_volume = docker_volume.DockerVolume(
+            name=name, config=config, session=self.__docker_session
+        )
+
+        self.__docker_volumes[name] = d_volume
+
+        return d_volume
+
+    def deploy_infrastructure(self) -> None:
+        self.__deploy_volumes()
+
+        self.__deploy_networks()
+
+        self.__deploy_nodes()
+
+    def clear_infrastructure(self) -> None:
+        self.__clear_nodes()
+
+        self.__clear_networks()
+
+        self.__clear_volumes()
+
+    def remove_infrastructure(self) -> None:
+        self.__remove_nodes()
+
+        self.__remove_networks()
+
+        self.__remove_volumes()
+
+        self.__docker_session.close()
+
+    def get_nodes(self) -> Mapping[str, node.Node]:
+        return self.__docker_nodes.copy()
+
+    def get_network(self) -> Mapping[str, deployer.Network]:
+        return self.__docker_networks.copy()
+
+    def get_volumes(self) -> Mapping[str, deployer.Volume]:
+        return self.__docker_volumes.copy()
 
     # ------ докер-специфичные функции
-
-    def build_image(
-        self,
-        who_ask: docker_node.DockerNode,
-        config: node_config.NodeConfig,
-        image_tag: str,
-    ) -> dockerapi_images.Image | None:
-        node_name = who_ask.get_name()
-
-        search_result = self.__docker_nodes.get(node_name, None)
-
-        if search_result is None or (not (search_result is who_ask)):
-            return None
-
-        if self.__docker_session is None:
-            self.__docker_session = docker.from_env()
-
-        try:
-            image = self.__docker_session.images.build(
-                path=str(Path(__file__).parent),
-                buildargs={"OS_IMAGE": config.os},
-                tag=image_tag,
-            )[0]
-
-            return image
-        except docker.errors.BuildError as err:
-            raise docker_exceptions.ImageBuildError(
-                f"cannot build an image {image_tag} from the Dockerfile"
-            ) from err
-
-        except docker.errors.APIError as err:
-            raise docker_exceptions.ImageBuildError(
-                f"server returns an error: {err}"
-            ) from err
-
-        except docker.errors.DockerException as err:
-            raise docker_exceptions.ImageBuildError(
-                f"unpredictable error: {err}"
-            ) from err
-
-    def create_container(
-        self,
-        who_ask: docker_node.DockerNode,
-        image: dockerapi_images.Image,
-        config: node_config.NodeConfig,
-        name: str,
-        mount_configs: list[mount_config.MountConfig],
-    ) -> dockerapi_containers.Container | None:
-        node_name = who_ask.get_name()
-
-        search_result = self.__docker_nodes.get(node_name, None)
-
-        if search_result is None or (not (search_result is who_ask)):
-            return None
-
-        if self.__docker_session is None:
-            self.__docker_session = docker.from_env()
-
-        try:
-            container = self.__docker_session.containers.run(
-                image=image,
-                cpu_period=config.cpu_limit,
-                cpu_quota=100000 * config.cpu_limit,
-                mem_limit=config.mem_limit,
-                detach=True,
-                name=name,
-                cap_add=(["NET_ADMIN"] if config.net_settings_roots else None),
-                sysctls=(
-                    {"net.ipv4.ip_forward": "1"} if config.ip_forwarding else None
-                ),
-                volumes=self.__create_volume_mount_map(mount_configs=mount_configs),
-            )
-        except docker.errors.ImageNotFound as err:
-            raise docker_exceptions.ResourceCreationError(
-                f"the image {image} not found"
-            ) from err
-
-        except docker.errors.APIError as err:
-            raise docker_exceptions.ResourceCreationError(
-                f"server returns an error"
-            ) from err
-
-        if not (config.connect_to_docker_default):
-            if self.__default_bridge is None:
-                try:
-                    networks = self.__docker_session.networks.list(names=["bridge"])  # type: ignore
-                except docker.errors.APIError as err:
-                    container.remove(force=True)
-                    raise docker_exceptions.ResourceCreationError(
-                        f"cannot get the default bridge"
-                    )
-
-                if len(networks) == 0:
-                    container.remove(force=True)
-                    raise docker_exceptions.ResourceCreationError(
-                        f"cannot get the default bridge"
-                    )
-
-                self.__default_bridge = networks[0]
-
-            try:
-                self.__default_bridge.disconnect(container=container)
-            except docker.errors.APIError as err:
-                container.remove(force=True)
-                raise docker_exceptions.ResourceCreationError(
-                    f"failed to disconnect container from the default bridge"
-                )
-
-        return container
-
-    def delete_image(
-        self, who_ask: docker_node.DockerNode, image: str, force: bool = False
-    ) -> None:
-        node_name = who_ask.get_name()
-
-        search_result = self.__docker_nodes.get(node_name, None)
-
-        if search_result is None or (not (search_result is who_ask)):
-            return None
-
-        if self.__docker_session is None:
-            self.__docker_session = docker.from_env()
-
-        try:
-            self.__docker_session.images.remove(image=image, force=force)  # type: ignore
-        except Exception as err:
-            raise docker_exceptions.FailedToDeleteAnImage(
-                f"cannot delete the image {image}"
-            ) from err
-
-    def remove_node(self, who_ask: docker_node.DockerNode) -> None:
-        node_name = who_ask.get_name()
-
-        search_result = self.__docker_nodes.get(node_name, None)
-
-        if search_result is not None and search_result is who_ask:
-            self.__docker_nodes.pop(node_name)
-
-    def create_volume(
-        self,
-        who_ask: docker_volume.DockerVolume,
-        volume_config: volume_config.VolumeConfig,
-    ) -> dockerapi_volumes.Volume | None:
-        volume_name = who_ask.get_name()
-
-        search_result = self.__docker_volumes.get(volume_name, None)
-
-        if search_result is None or (not (search_result is who_ask)):
-            return None
-
-        if self.__docker_session is None:
-            self.__docker_session = docker.from_env()
-
-        try:
-            config = volume_config
-            volume = self.__docker_session.volumes.create(name=volume_name, driver=config.docker_volume_driver, driver_opts=config.docker_driver_options)  # type: ignore
-            return volume
-        except docker.errors.APIError as err:
-            raise docker_exceptions.ResourceCreationError(
-                f"failed to create the volume {volume_name}"
-            ) from err
-
-    def remove_volume(self, who_ask: docker_volume.DockerVolume) -> None:
-        volume_name = who_ask.get_name()
-
-        search_result = self.__docker_volumes.get(volume_name, None)
-
-        if search_result is not None and search_result is who_ask:
-            self.__docker_volumes.pop(volume_name)
-
-    def create_network(
-        self, who_ask: docker_network.DockerNetwork, config: net_config.NetConfig
-    ) -> dockerapi_networks.Network | None:
-        network_name = who_ask.get_name()
-
-        search_result = self.__docker_networks.get(network_name, None)
-
-        if search_result is None or not (search_result is who_ask):
-            return None
-
-        if self.__docker_session is None:
-            self.__docker_session = docker.from_env()
-
-        try:
-            network = self.__docker_session.networks.create(
-                name=network_name,
-                enable_ipv6=config.ipv6,
-                driver=config.docker_net_driver,
-                internal=config.internal,
-            )
-
-            return network
-        except docker.errors.APIError as err:
-            raise docker_exceptions.ResourceCreationError(
-                f"cannot create the network {network_name}"
-            ) from err
-
-    def remove_network(self, who_ask: docker_network.DockerNetwork) -> None:
-        network_name = who_ask.get_name()
-
-        search_result = self.__docker_networks.get(network_name, None)
-
-        if search_result is not None and search_result is who_ask:
-            self.__docker_networks.pop(network_name)
 
     def check_node_is_known(
         self, who_ask: docker_network.DockerNetwork, node: docker_node.DockerNode
@@ -246,16 +117,131 @@ class DockerDeployer(deployer.Deployer):
 
     # ------ приватные методы
 
-    def __create_volume_mount_map(
-        self, mount_configs: list[mount_config.MountConfig]
-    ) -> dict[str, dict[str, str]]:
-        mount_map: dict[str, dict[str, str]] = dict()
+    def __deploy_volumes(self) -> None:
+        for volume_name in list(self.__docker_volumes.keys()):
+            volume = self.__docker_volumes[volume_name]
 
-        for mount_config in mount_configs:
-            name = mount_config.volume.get_name()
-            mount_path = mount_config.mount_path
-            ro = mount_config.read_only
+            try:
+                volume.deploy()
+            except common_exceptions.EntityIsRemovedException:
+                self.__docker_volumes.pop(volume_name)
+            except common_exceptions.EntityIsAlreadyDeployed:
+                pass
+            except docker_exceptions.DockerDeployError as err:
+                raise docker_exceptions.DockerDeployError(
+                    f"failed to deploy the volume {volume_name}"
+                ) from err
 
-            mount_map[name] = {"bind": mount_path, "mode": "ro" if ro else "rw"}
+    def __deploy_networks(self) -> None:
+        for net_name in list(self.__docker_networks.keys()):
+            network = self.__docker_networks[net_name]
 
-        return mount_map
+            try:
+                network.deploy()
+            except common_exceptions.EntityIsRemovedException:
+                self.__docker_networks.pop(net_name)
+            except common_exceptions.EntityIsAlreadyDeployed:
+                pass
+            except docker_exceptions.DockerDeployError as err:
+                raise docker_exceptions.DockerDeployError(
+                    f"failed to deploy the network {net_name}"
+                ) from err
+
+    def __deploy_nodes(self) -> None:
+        for node_name in list(self.__docker_nodes.keys()):
+            node = self.__docker_nodes[node_name]
+
+            try:
+                node.deploy()
+            except common_exceptions.EntityIsRemovedException:
+                self.__docker_nodes.pop(node_name)
+            except common_exceptions.EntityIsAlreadyDeployed:
+                pass
+            except docker_exceptions.DockerDeployError as err:
+                raise docker_exceptions.DockerDeployError(
+                    f"failed to deploy the node {node_name}"
+                ) from err
+
+    def __clear_nodes(self) -> None:
+        for node_name in list(self.__docker_nodes.keys()):
+            node = self.__docker_nodes[node_name]
+
+            try:
+                node.clear()
+            except common_exceptions.EntityIsRemovedException:
+                self.__docker_nodes.pop(node_name)
+            except common_exceptions.EntityIsNotDeployed:
+                pass
+            except docker_exceptions.DockerClearError as err:
+                raise docker_exceptions.DockerClearError(
+                    f"failed to clear the node {node_name}"
+                ) from err
+
+    def __clear_networks(self) -> None:
+        for net_name in list(self.__docker_networks.keys()):
+            network = self.__docker_networks[net_name]
+
+            try:
+                network.clear()
+            except common_exceptions.EntityIsRemovedException:
+                self.__docker_networks.pop(net_name)
+            except common_exceptions.EntityIsNotDeployed:
+                pass
+            except docker_exceptions.DockerClearError as err:
+                raise docker_exceptions.DockerClearError(
+                    f"failed to clear the network {net_name}"
+                ) from err
+
+    def __clear_volumes(self) -> None:
+        for volume_name in list(self.__docker_volumes.keys()):
+            volume = self.__docker_volumes[volume_name]
+
+            try:
+                volume.clear()
+            except common_exceptions.EntityIsRemovedException:
+                self.__docker_volumes.pop(volume_name)
+            except common_exceptions.EntityIsNotDeployed:
+                pass
+            except docker_exceptions.DockerClearError as err:
+                raise docker_exceptions.DockerClearError(
+                    f"failed to clear the volume {volume_name}"
+                ) from err
+
+    def __remove_nodes(self) -> None:
+        for node_name in list(self.__docker_nodes.keys()):
+            node = self.__docker_nodes[node_name]
+
+            try:
+                node.remove()
+            except common_exceptions.EntityIsRemovedException:
+                self.__docker_nodes.pop(node_name)
+            except docker_exceptions.DockerRemoveError as err:
+                raise docker_exceptions.DockerRemoveError(
+                    f"failed to remove the node {node_name}"
+                ) from err
+
+    def __remove_networks(self) -> None:
+        for net_name in list(self.__docker_networks.keys()):
+            network = self.__docker_networks[net_name]
+
+            try:
+                network.remove()
+            except common_exceptions.EntityIsRemovedException:
+                self.__docker_networks.pop(net_name)
+            except docker_exceptions.DockerRemoveError as err:
+                raise docker_exceptions.DockerRemoveError(
+                    f"failed to remove the network {net_name}"
+                ) from err
+
+    def __remove_volumes(self) -> None:
+        for volume_name in list(self.__docker_volumes.keys()):
+            volume = self.__docker_volumes[volume_name]
+
+            try:
+                volume.remove()
+            except common_exceptions.EntityIsRemovedException:
+                self.__docker_volumes.pop(volume_name)
+            except docker_exceptions.DockerRemoveError as err:
+                raise docker_exceptions.DockerRemoveError(
+                    f"failed to remove the volume {volume_name}"
+                ) from err

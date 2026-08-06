@@ -6,18 +6,22 @@ import time
 
 from ..configs.node_config import NodeConfig
 from ..interfaces.exec_result import ExecResult
-from .docker_deployer import DockerDeployer
 from ..exception import docker_exceptions, common_exceptions
 from ..interfaces import entity_state, types, mount_config
 from pg_polygon_orchestr.core.interfaces.types import Type
 from ..interfaces.node import Node
+from . import docker_session
 
 
 class DockerNode(Node):
-    def __init__(self, name: str, config: NodeConfig, deployer: DockerDeployer) -> None:
+    def __init__(
+        self, name: str, config: NodeConfig, session: docker_session.DockerClientSession
+    ) -> None:
         self.__name = name
         self.__config = config
-        self.__deployer = deployer
+        self.__shared_client_session: docker_session.DockerClientSession = (
+            docker_session.DockerClientSession()
+        )
         self.__image_name: str = ""
         self.__state: entity_state.EntityState = entity_state.EntityState.NOT_DEPLOYED
         self.__docker_image: docker_images.Image | None = None
@@ -118,14 +122,9 @@ class DockerNode(Node):
         image_tag = f"image_node_{self.__name}:v0"
         self.__image_name = image_tag
         try:
-            image = self.__deployer.build_image(  # type: ignore
-                who_ask=self, config=self.__my_config, image_tag=image_tag
+            image = self.__shared_client_session.ask_to_build_image(  # type: ignore
+                config=self.__config, image_tag=image_tag  # type: ignore
             )
-
-            if image is None:
-                raise docker_exceptions.DockerDeployError(
-                    f"the node {self.__name} is not registred"
-                )
 
             self.__docker_image = image
             self.__state = entity_state.EntityState.DEPLOYED
@@ -136,8 +135,9 @@ class DockerNode(Node):
 
     def __clear(self) -> None:
         try:
-            self.__docker_container.remove()  # type: ignore
-            self.__deployer.delete_image(who_ask=self, image=self.__image_name)  # type: ignore
+            if self.__docker_container is not None:
+                self.__docker_container.remove()
+            self.__shared_client_session.ask_to_delete_image(image=self.__image_name)
         except docker.errors.APIError as err:
             raise docker_exceptions.DockerClearError(
                 f"failed to remove node's {self.__name} container"
@@ -155,8 +155,9 @@ class DockerNode(Node):
     def __remove(self) -> None:
         if self.__is_state_as_required(required=entity_state.EntityState.DEPLOYED):
             try:
-                self.__docker_container.remove(force=True)  # type: ignore
-                self.__deployer.delete_image(who_ask=self, image=self.__image_name, force=True)  # type: ignore
+                if self.__docker_container is not None:
+                    self.__docker_container.remove(force=True)
+                self.__shared_client_session.ask_to_delete_image(image=self.__image_name, force=True)  # type: ignore
             except docker.errors.APIError as err:
                 raise docker_exceptions.DockerClearError(
                     f"failed to force remove node's {self.__name} container"
@@ -166,30 +167,21 @@ class DockerNode(Node):
                     f"failed to force remove node's {self.__name} image {self.__image_name}"
                 ) from err
 
-        self.__deployer.remove_node(who_ask=self)  # type: ignore
-
         self.__docker_container = None
         self.__image_name = ""
         self.__docker_image = None
         self.__config = None
-        self.__deployer = None
         self.__state = entity_state.EntityState.REMOVED
 
     def __start(self, mount_configs: list[mount_config.MountConfig] = []) -> None:
         if self.__docker_container is None:
             try:
-                container = self.__deployer.create_container(  # type: ignore
-                    who_ask=self,
+                container = self.__shared_client_session.ask_to_create_a_container(  # type: ignore
                     image=self.__docker_image,  # type: ignore
                     config=self.__config,  # type: ignore
                     name=self.__name,
                     mount_configs=mount_configs,
                 )
-
-                if container is None:
-                    raise docker_exceptions.DockerContStartError(
-                        f"the node {self.__name} is not registred"
-                    )
 
                 self.__docker_container = container
             except docker_exceptions.ResourceCreationError as err:
@@ -234,15 +226,20 @@ class DockerNode(Node):
 
     def __exec(self, command: str) -> ExecResult:
         try:
-            self.__docker_container.reload()  # type: ignore
+            if self.__docker_container is None:
+                raise docker_exceptions.ExecOnContainerError(
+                    f"the container {self.__name} doesn't exist"
+                )
 
-            if self.__docker_container.status != "running":  # type: ignore
+            self.__docker_container.reload()
+
+            if self.__docker_container.status != "running":
                 raise docker_exceptions.ExecOnContainerError(
                     f"the node {self.__name} is stopped"
                 )
 
             start = time.perf_counter_ns()
-            result = self.__docker_container.exec_run(command, demux=True)  # type: ignore
+            result = self.__docker_container.exec_run(command, demux=True)
             end = time.perf_counter_ns()
 
             exit_code = result.exit_code
@@ -267,12 +264,12 @@ class DockerNode(Node):
         else:
             try:
                 self.__docker_container.update(  # type: ignore
-                    mem_limit=self.__config.mem_limit,  # type: ignore
+                    mem_limit=new_config.mem_limit,  # type: ignore
                     cpu_period=100000,
-                    cpu_quota=self.__config.cpu_limit * 100000,  # type: ignore
+                    cpu_quota=new_config.cpu_limit * 100000,  # type: ignore
                 )
 
-                self.__my_config = new_config
+                self.__config = new_config
 
             except docker.errors.APIError as err:
                 raise docker_exceptions.UpdateContainerConfError(
@@ -291,4 +288,4 @@ class DockerNode(Node):
     # ------ приватные проверки
 
     def __is_state_as_required(self, required: entity_state.EntityState) -> bool:
-        return self.__state == required
+        return self.__state is required

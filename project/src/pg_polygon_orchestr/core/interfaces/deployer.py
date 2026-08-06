@@ -1,7 +1,7 @@
 # abstract class for deploying nodes using its config
 
 from abc import ABC, abstractmethod
-
+from collections.abc import Mapping
 
 from .node import Node
 from .volume import Volume
@@ -19,7 +19,7 @@ class Deployer(ABC):
         pass
 
     @abstractmethod
-    def clean_infrastructure(self) -> None:
+    def clear_infrastructure(self) -> None:
         pass
 
     @abstractmethod
@@ -29,27 +29,29 @@ class Deployer(ABC):
     # ----- КОНФИГУРАЦИЯ
 
     @abstractmethod
-    def put_node_config(self, config: node_config.NodeConfig) -> Node:
+    def put_node_config(self, name: str, config: node_config.NodeConfig) -> Node:
         pass
 
     @abstractmethod
-    def put_volume_config(self, config: volume_config.VolumeConfig) -> Volume:
+    def put_volume_config(
+        self, name: str, config: volume_config.VolumeConfig
+    ) -> Volume:
         pass
 
     @abstractmethod
-    def put_network_config(self, config: net_config.NetConfig) -> Network:
+    def put_network_config(self, name: str, config: net_config.NetConfig) -> Network:
         pass
 
     # ----- ГЕТТЕРЫ
 
     @abstractmethod
-    def get_nodes(self) -> dict[str, Node]:
+    def get_nodes(self) -> Mapping[str, Node]:
         pass
 
     @abstractmethod
-    def get_volumes(self) -> dict[str, Volume]:
+    def get_volumes(self) -> Mapping[str, Volume]:
         pass
 
     @abstractmethod
-    def get_network(self) -> dict[str, Network]:
+    def get_network(self) -> Mapping[str, Network]:
         pass
