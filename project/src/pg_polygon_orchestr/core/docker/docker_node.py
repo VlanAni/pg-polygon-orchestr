@@ -4,13 +4,11 @@ import docker.models.images as docker_images
 import docker.models.containers as docker_containers
 import time
 
-from ..configs.node_config import NodeConfig
-from ..interfaces.exec_result import ExecResult
+from ..configs import NodeConfig
 from ..exception import docker_exceptions, common_exceptions
-from ..interfaces import entity_state, types, mount_config
-from pg_polygon_orchestr.core.interfaces.types import Type
-from ..interfaces.node import Node
+from ..interfaces import Node
 from . import docker_session
+from ..meta import MountConfig, Type, EntityState, ExecResult
 
 
 class DockerNode(Node):
@@ -23,19 +21,19 @@ class DockerNode(Node):
             docker_session.DockerClientSession()
         )
         self.__image_name: str = ""
-        self.__state: entity_state.EntityState = entity_state.EntityState.NOT_DEPLOYED
+        self.__state: EntityState = EntityState.NOT_DEPLOYED
         self.__docker_image: docker_images.Image | None = None
         self.__docker_container: docker_containers.Container | None = None
 
     # ----- Интерфейсные методы
 
     def deploy(self) -> None:
-        if self.__is_state_as_required(required=entity_state.EntityState.REMOVED):
+        if self.__is_state_as_required(required=EntityState.REMOVED):
             raise common_exceptions.EntityIsRemovedException(
                 f"the node {self.__name} is removed"
             )
 
-        if self.__is_state_as_required(required=entity_state.EntityState.DEPLOYED):
+        if self.__is_state_as_required(required=EntityState.DEPLOYED):
             raise common_exceptions.EntityIsAlreadyDeployed(
                 f"the node {self.__name} is already deployed"
             )
@@ -43,25 +41,25 @@ class DockerNode(Node):
         self.__deploy()
 
     def clear(self) -> None:
-        if self.__is_state_as_required(required=entity_state.EntityState.REMOVED):
+        if self.__is_state_as_required(required=EntityState.REMOVED):
             raise common_exceptions.EntityIsRemovedException(
                 f"the node {self.__name} is removed"
             )
 
-        if self.__is_state_as_required(required=entity_state.EntityState.NOT_DEPLOYED):
+        if self.__is_state_as_required(required=EntityState.NOT_DEPLOYED):
             raise common_exceptions.EntityIsNotDeployed(
                 f"the node {self.__name} is not deployed"
             )
 
         self.__clear()
 
-    def start(self, mount_configs: list[mount_config.MountConfig] = []) -> None:
-        if self.__is_state_as_required(required=entity_state.EntityState.REMOVED):
+    def start(self, mount_configs: list[MountConfig] = []) -> None:
+        if self.__is_state_as_required(required=EntityState.REMOVED):
             raise common_exceptions.EntityIsRemovedException(
                 f"the node {self.__name} is removed"
             )
 
-        if self.__is_state_as_required(required=entity_state.EntityState.NOT_DEPLOYED):
+        if self.__is_state_as_required(required=EntityState.NOT_DEPLOYED):
             raise common_exceptions.EntityIsNotDeployed(
                 f"the node {self.__name} is not deployed"
             )
@@ -69,12 +67,12 @@ class DockerNode(Node):
         self.__start(mount_configs=mount_configs)
 
     def stop(self, timeout: int) -> None:
-        if self.__is_state_as_required(required=entity_state.EntityState.REMOVED):
+        if self.__is_state_as_required(required=EntityState.REMOVED):
             raise common_exceptions.EntityIsRemovedException(
                 f"the node {self.__name} is removed"
             )
 
-        if self.__is_state_as_required(required=entity_state.EntityState.NOT_DEPLOYED):
+        if self.__is_state_as_required(required=EntityState.NOT_DEPLOYED):
             raise common_exceptions.EntityIsNotDeployed(
                 f"the node {self.__name} is not deployed"
             )
@@ -82,12 +80,12 @@ class DockerNode(Node):
         self.__stop(timeout=timeout)
 
     def exec(self, command: str) -> ExecResult:
-        if self.__is_state_as_required(required=entity_state.EntityState.REMOVED):
+        if self.__is_state_as_required(required=EntityState.REMOVED):
             raise common_exceptions.EntityIsRemovedException(
                 f"the node {self.__name} is removed"
             )
 
-        if self.__is_state_as_required(required=entity_state.EntityState.NOT_DEPLOYED):
+        if self.__is_state_as_required(required=EntityState.NOT_DEPLOYED):
             raise common_exceptions.EntityIsNotDeployed(
                 f"the node {self.__name} is not deployed"
             )
@@ -95,7 +93,7 @@ class DockerNode(Node):
         return self.__exec(command=command)
 
     def update(self, new_config: NodeConfig) -> None:
-        if self.__is_state_as_required(required=entity_state.EntityState.REMOVED):
+        if self.__is_state_as_required(required=EntityState.REMOVED):
             raise common_exceptions.EntityIsRemovedException(
                 f"the node {self.__name} is removed"
             )
@@ -103,7 +101,7 @@ class DockerNode(Node):
         self.__update(new_config=new_config)
 
     def remove(self) -> None:
-        if self.__is_state_as_required(required=entity_state.EntityState.REMOVED):
+        if self.__is_state_as_required(required=EntityState.REMOVED):
             raise common_exceptions.EntityIsRemovedException(
                 f"the node {self.__name} is removed"
             )
@@ -111,7 +109,7 @@ class DockerNode(Node):
         self.__remove()
 
     def get_type(self) -> Type:
-        return types.Type.DOCKER
+        return Type.DOCKER
 
     def get_name(self) -> str:
         return self.__name
@@ -127,7 +125,7 @@ class DockerNode(Node):
             )
 
             self.__docker_image = image
-            self.__state = entity_state.EntityState.DEPLOYED
+            self.__state = EntityState.DEPLOYED
         except docker_exceptions.ImageBuildError as err:
             raise docker_exceptions.DockerDeployError(
                 f"failed to build a docker image: {err}"
@@ -150,10 +148,10 @@ class DockerNode(Node):
         self.__docker_container = None
         self.__image_name = ""
         self.__docker_image = None
-        self.__state = entity_state.EntityState.NOT_DEPLOYED
+        self.__state = EntityState.NOT_DEPLOYED
 
     def __remove(self) -> None:
-        if self.__is_state_as_required(required=entity_state.EntityState.DEPLOYED):
+        if self.__is_state_as_required(required=EntityState.DEPLOYED):
             try:
                 if self.__docker_container is not None:
                     self.__docker_container.remove(force=True)
@@ -171,9 +169,9 @@ class DockerNode(Node):
         self.__image_name = ""
         self.__docker_image = None
         self.__config = None
-        self.__state = entity_state.EntityState.REMOVED
+        self.__state = EntityState.REMOVED
 
-    def __start(self, mount_configs: list[mount_config.MountConfig] = []) -> None:
+    def __start(self, mount_configs: list[MountConfig] = []) -> None:
         if self.__docker_container is None:
             try:
                 container = self.__shared_client_session.ask_to_create_a_container(  # type: ignore
@@ -259,7 +257,7 @@ class DockerNode(Node):
             ) from err
 
     def __update(self, new_config: NodeConfig) -> None:
-        if self.__is_state_as_required(required=entity_state.EntityState.NOT_DEPLOYED):
+        if self.__is_state_as_required(required=EntityState.NOT_DEPLOYED):
             self.__config = new_config
         else:
             try:
@@ -287,5 +285,5 @@ class DockerNode(Node):
 
     # ------ приватные проверки
 
-    def __is_state_as_required(self, required: entity_state.EntityState) -> bool:
+    def __is_state_as_required(self, required: EntityState) -> bool:
         return self.__state is required

@@ -1,23 +1,25 @@
-from ..interfaces import network, entity_state, types
-from ..configs import net_config
+from ..interfaces import Network, Node
+from ..configs import NetConfig
 from . import docker_session, docker_node
 from ..exception import docker_exceptions, common_exceptions
 
 import docker.errors
 import typing
 
+from ..meta import EntityState, Type
 
-class DockerNetwork(network.Network):
+
+class DockerNetwork(Network):
     def __init__(
         self,
         name: str,
-        config: net_config.NetConfig,
+        config: NetConfig,
         session: docker_session.DockerClientSession,
     ):
         self.__name = name
         self.__config = config
         self.__shared_docker_session = session
-        self.__state = entity_state.EntityState.NOT_DEPLOYED
+        self.__state = EntityState.NOT_DEPLOYED
         self.__network = None
 
     # ------ интерфейсные методы
@@ -25,16 +27,16 @@ class DockerNetwork(network.Network):
     def get_name(self) -> str:
         return self.__name
 
-    def get_type(self) -> types.Type:
-        return types.Type.DOCKER
+    def get_type(self) -> Type:
+        return Type.DOCKER
 
     def deploy(self) -> None:
-        if self.__is_state_as_required(required=entity_state.EntityState.REMOVED):
+        if self.__is_state_as_required(required=EntityState.REMOVED):
             raise common_exceptions.EntityIsRemovedException(
                 f"the network {self.__name} is removed"
             )
 
-        if self.__is_state_as_required(required=entity_state.EntityState.DEPLOYED):
+        if self.__is_state_as_required(required=EntityState.DEPLOYED):
             raise common_exceptions.EntityIsAlreadyDeployed(
                 f"the network {self.__name} is already deployed"
             )
@@ -42,12 +44,12 @@ class DockerNetwork(network.Network):
         self.__deploy()
 
     def clear(self) -> None:
-        if self.__is_state_as_required(required=entity_state.EntityState.REMOVED):
+        if self.__is_state_as_required(required=EntityState.REMOVED):
             raise common_exceptions.EntityIsRemovedException(
                 f"the network {self.__name} is removed"
             )
 
-        if self.__is_state_as_required(required=entity_state.EntityState.NOT_DEPLOYED):
+        if self.__is_state_as_required(required=EntityState.NOT_DEPLOYED):
             raise common_exceptions.EntityIsNotDeployed(
                 f"the network {self.__name} is not deployed"
             )
@@ -55,7 +57,7 @@ class DockerNetwork(network.Network):
         self.__clear()
 
     def remove(self) -> None:
-        if self.__is_state_as_required(required=entity_state.EntityState.REMOVED):
+        if self.__is_state_as_required(required=EntityState.REMOVED):
             raise common_exceptions.EntityIsRemovedException(
                 f"the network {self.__name} is removed"
             )
@@ -63,12 +65,12 @@ class DockerNetwork(network.Network):
         self.__remove()
 
     def get_network_ip(self) -> str:
-        if self.__is_state_as_required(required=entity_state.EntityState.REMOVED):
+        if self.__is_state_as_required(required=EntityState.REMOVED):
             raise common_exceptions.EntityIsRemovedException(
                 f"the network {self.__name} is removed"
             )
 
-        if self.__is_state_as_required(required=entity_state.EntityState.NOT_DEPLOYED):
+        if self.__is_state_as_required(required=EntityState.NOT_DEPLOYED):
             raise common_exceptions.EntityIsNotDeployed(
                 f"the network {self.__name} is not deployed"
             )
@@ -82,39 +84,39 @@ class DockerNetwork(network.Network):
 
         return self.__network.attrs["IPAM"]["Config"][0]["Subnet"]  # type: ignore
 
-    def connect_node(self, node: network.Node) -> None:
-        if self.__is_state_as_required(required=entity_state.EntityState.REMOVED):
+    def connect_node(self, node: Node) -> None:
+        if self.__is_state_as_required(required=EntityState.REMOVED):
             raise common_exceptions.EntityIsRemovedException(
                 f"the network {self.__name} is removed"
             )
 
-        if self.__is_state_as_required(required=entity_state.EntityState.NOT_DEPLOYED):
+        if self.__is_state_as_required(required=EntityState.NOT_DEPLOYED):
             raise common_exceptions.EntityIsNotDeployed(
                 f"the network {self.__name} is not deployed"
             )
 
         self.__connect_node(node=node)
 
-    def disconnect_node(self, node: network.Node) -> None:
-        if self.__is_state_as_required(required=entity_state.EntityState.REMOVED):
+    def disconnect_node(self, node: Node) -> None:
+        if self.__is_state_as_required(required=EntityState.REMOVED):
             raise common_exceptions.EntityIsRemovedException(
                 f"the network {self.__name} is removed"
             )
 
-        if self.__is_state_as_required(required=entity_state.EntityState.NOT_DEPLOYED):
+        if self.__is_state_as_required(required=EntityState.NOT_DEPLOYED):
             raise common_exceptions.EntityIsNotDeployed(
                 f"the network {self.__name} is not deployed"
             )
 
         self.__disconnect_node(node=node)
 
-    def get_node_network_ip(self, node: network.Node, ipv6: bool = False) -> str:
-        if self.__is_state_as_required(required=entity_state.EntityState.REMOVED):
+    def get_node_network_ip(self, node: Node, ipv6: bool = False) -> str:
+        if self.__is_state_as_required(required=EntityState.REMOVED):
             raise common_exceptions.EntityIsRemovedException(
                 f"the network {self.__name} is removed"
             )
 
-        if self.__is_state_as_required(required=entity_state.EntityState.NOT_DEPLOYED):
+        if self.__is_state_as_required(required=EntityState.NOT_DEPLOYED):
             raise common_exceptions.EntityIsNotDeployed(
                 f"the network {self.__name} is not deployed"
             )
@@ -137,7 +139,7 @@ class DockerNetwork(network.Network):
             )
 
         self.__network = network
-        self.__state = entity_state.EntityState.DEPLOYED
+        self.__state = EntityState.DEPLOYED
 
     def __clear(self) -> None:
         try:
@@ -148,10 +150,10 @@ class DockerNetwork(network.Network):
             ) from err
 
         self.__network = None
-        self.__state = entity_state.EntityState.NOT_DEPLOYED
+        self.__state = EntityState.NOT_DEPLOYED
 
     def __remove(self) -> None:
-        if self.__is_state_as_required(required=entity_state.EntityState.DEPLOYED):
+        if self.__is_state_as_required(required=EntityState.DEPLOYED):
             try:
                 self.__network.remove()  # type: ignore
             except docker.errors.APIError as err:
@@ -160,11 +162,11 @@ class DockerNetwork(network.Network):
                 ) from err
 
         self.__network = None
-        self.__state = entity_state.EntityState.REMOVED
+        self.__state = EntityState.REMOVED
         self.__config = None
 
-    def __connect_node(self, node: network.Node) -> None:
-        if node.get_type() is types.Type.DOCKER:
+    def __connect_node(self, node: Node) -> None:
+        if node.get_type() is Type.DOCKER:
             d_node = typing.cast(docker_node.DockerNode, val=node)
         else:
             raise docker_exceptions.ConnectToDockerNetError(
@@ -185,8 +187,8 @@ class DockerNetwork(network.Network):
                 f"failed to connect the container {d_node.get_name()} with id {container_id} to the network {self.__name}"
             ) from err
 
-    def __disconnect_node(self, node: network.Node) -> None:
-        if node.get_type() is types.Type.DOCKER:
+    def __disconnect_node(self, node: Node) -> None:
+        if node.get_type() is Type.DOCKER:
             d_node = typing.cast(docker_node.DockerNode, val=node)
         else:
             raise docker_exceptions.ConnectToDockerNetError(
@@ -207,8 +209,8 @@ class DockerNetwork(network.Network):
                 f"failed to disconnect the container {d_node.get_name()} with id {container_id} from the network {self.__name}"
             ) from err
 
-    def __get_node_network_ip(self, node: network.Node, ipv6: bool = False) -> str:
-        if node.get_type() is types.Type.DOCKER:
+    def __get_node_network_ip(self, node: Node, ipv6: bool = False) -> str:
+        if node.get_type() is Type.DOCKER:
             d_node = typing.cast(docker_node.DockerNode, val=node)
         else:
             raise docker_exceptions.GetContainerIpError(
@@ -261,5 +263,5 @@ class DockerNetwork(network.Network):
 
     # ------ приватные методы
 
-    def __is_state_as_required(self, required: entity_state.EntityState) -> bool:
+    def __is_state_as_required(self, required: EntityState) -> bool:
         return self.__state == required

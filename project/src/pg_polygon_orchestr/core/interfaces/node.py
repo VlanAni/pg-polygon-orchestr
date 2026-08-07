@@ -2,10 +2,9 @@
 
 from abc import abstractmethod
 
-from .exec_result import ExecResult
-from ..configs.node_config import NodeConfig
+from ..configs import NodeConfig
 from .entity import Entity
-from .mount_config import MountConfig
+from ..meta import MountConfig, ExecResult
 
 
 class Node(Entity):

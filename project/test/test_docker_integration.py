@@ -5,12 +5,12 @@ pytest -m integration test/integration/test_docker_integration.py -v
 import docker
 import pytest
 
-from pg_polygon_orchestr.core.configs.node_config import NodeConfig
-from pg_polygon_orchestr.core.configs.net_config import NetConfig
-from pg_polygon_orchestr.core.configs.volume_config import VolumeConfig
-from pg_polygon_orchestr.core.docker import docker_deployer
-from pg_polygon_orchestr.core.exception import common_exceptions, docker_exceptions
-from pg_polygon_orchestr.core.interfaces import exec_result, mount_config
+from pg_polygon_orchestr import NodeConfig
+from pg_polygon_orchestr import NetConfig
+from pg_polygon_orchestr import VolumeConfig
+from pg_polygon_orchestr import DockerDeployer
+from pg_polygon_orchestr import common_exceptions, docker_exceptions
+from pg_polygon_orchestr import ExecResult, MountConfig
 
 pytestmark = pytest.mark.integration
 
@@ -33,7 +33,7 @@ skip_if_no_docker = pytest.mark.skipif(
 
 @pytest.fixture
 def deployer():
-    d = docker_deployer.DockerDeployer()
+    d = DockerDeployer()
     yield d
     d.remove_infrastructure()
 
@@ -44,7 +44,7 @@ class TestDockerDeployerIntegration:
     # ----- БАЗОВЫЙ ФУНКЦИОНАЛ
 
     def test_1__two_nodes_deployed_started_named_and_destroyed(
-        self, deployer: docker_deployer.DockerDeployer
+        self, deployer: DockerDeployer
     ):
         # конфиг для двух нод
         config1 = NodeConfig(
@@ -109,7 +109,7 @@ class TestDockerDeployerIntegration:
         client.close()
 
     def test_2__infrastructure_four_nodes_start_stop_destroy(
-        self, deployer: docker_deployer.DockerDeployer
+        self, deployer: DockerDeployer
     ):
         # конфиг для первых двух нод
         config1 = NodeConfig(
@@ -181,9 +181,7 @@ class TestDockerDeployerIntegration:
         our_containers = [c for c in containers if c.name in expected_container_names]
         client.close()
 
-    def test_3__node_update_configuration(
-        self, deployer: docker_deployer.DockerDeployer
-    ):
+    def test_3__node_update_configuration(self, deployer: DockerDeployer):
         try:
             # изначальный конфиг ноды
             config = NodeConfig(
@@ -237,7 +235,7 @@ class TestDockerDeployerIntegration:
             # очистка ресурсов
             deployer.remove_infrastructure()
 
-    def test_4__exec_simple_commands(self, deployer: docker_deployer.DockerDeployer):
+    def test_4__exec_simple_commands(self, deployer: DockerDeployer):
         try:
             # конфигурация для ноды
             config = NodeConfig(
@@ -295,9 +293,7 @@ class TestDockerDeployerIntegration:
 
     # ----- СЕТЕВЫЕ ТЕСТЫ
 
-    def test_5__internal_network_with_two_containers(
-        self, deployer: docker_deployer.DockerDeployer
-    ):
+    def test_5__internal_network_with_two_containers(self, deployer: DockerDeployer):
         # конфигурируем ноды
         node_a_conf = NodeConfig(
             cpu_limit=1,
@@ -357,9 +353,7 @@ class TestDockerDeployerIntegration:
 
         deployer.remove_infrastructure()
 
-    def test_6__public_network_with_three_containers(
-        self, deployer: docker_deployer.DockerDeployer
-    ):
+    def test_6__public_network_with_three_containers(self, deployer: DockerDeployer):
 
         # конфиг ноды (не подключаемся к дефолтной сети, она здесь будет мешать, так как из неё можно выйти в интернет)
         config = NodeConfig(
@@ -413,9 +407,7 @@ class TestDockerDeployerIntegration:
 
         deployer.remove_infrastructure()
 
-    def test_7__four_nodes_and_four_networks(
-        self, deployer: docker_deployer.DockerDeployer
-    ):
+    def test_7__four_nodes_and_four_networks(self, deployer: DockerDeployer):
         config = NodeConfig(
             cpu_limit=1,
             mem_limit="512m",
@@ -437,6 +429,13 @@ class TestDockerDeployerIntegration:
         net3 = deployer.put_network_config(name="net3", config=net_config)
         net4 = deployer.put_network_config(name="net4", config=net_config)
 
+        routes = [
+            (a, c, b, net1, net2),
+            (b, d, c, net2, net3),
+            (c, a, d, net3, net4),
+            (d, b, a, net4, net1),
+        ]
+
         deployer.deploy_infrastructure()
 
         a.start()
@@ -456,29 +455,25 @@ class TestDockerDeployerIntegration:
         net4.connect_node(node=a)
         net4.connect_node(node=d)
 
-        package_update = a.exec(command="apt-get update -qq")
-        assert self.__check_exit_code(package_update, 0, True)
+        for node in [a, b, c, d]:
+            node.exec(
+                "sh -c 'apt-get update -qq && apt-get install -y iproute2 iputils-ping traceroute'"
+            )
 
-        package_installation = a.exec(
-            command="apt-get install -y iproute2 iputils-ping traceroute",
-        )
-        assert self.__check_exit_code(package_installation, 0, True)
+        for source, target, via_node, source_net, target_net in routes:
+            target_ip = target_net.get_node_network_ip(node=target)
+            via_ip = source_net.get_node_network_ip(node=via_node)
+            target_subnet = target_net.get_network_ip()
 
-        net_2_ip = net2.get_network_ip()
+            route_result = source.exec(f"ip route add {target_subnet} via {via_ip}")
+            assert self.__check_exit_code(route_result, 0, True)
 
-        node_c_ip_net_2 = net2.get_node_network_ip(node=c)
+            ping_result = source.exec(f"ping -c 1 {target_ip}")
+            assert self.__check_exit_code(ping_result, 0, True)
 
-        node_b_ip_net_1 = net1.get_node_network_ip(node=b)
-
-        result = a.exec(f"ip route add {net_2_ip} via {node_b_ip_net_1}")
-        assert self.__check_exit_code(result, 0, True)
-
-        a_ping_c = a.exec(f"ping -c 1 {node_c_ip_net_2}")
-        assert self.__check_exit_code(a_ping_c, 0, True)
-
-        a_traceroute_c = a.exec(f"traceroute {node_c_ip_net_2}")
-        assert self.__check_exit_code(a_traceroute_c, 0, True)
-        assert node_b_ip_net_1 in a_traceroute_c.stdout  # type: ignore
+            traceroute_result = source.exec(f"traceroute -n {target_ip}")
+            assert self.__check_exit_code(traceroute_result, 0, True)
+            assert via_ip in traceroute_result.stdout  # type: ignore
 
         a.stop(0)
         b.stop(0)
@@ -489,9 +484,7 @@ class TestDockerDeployerIntegration:
 
     # ----- ТЕСТЫ ДЛЯ ТОМОВ
 
-    def test_8__volume_mount_persistency(
-        self, deployer: docker_deployer.DockerDeployer
-    ):
+    def test_8__volume_mount_persistency(self, deployer: DockerDeployer):
         node_config = NodeConfig(cpu_limit=1, mem_limit="512m", os="ubuntu:latest")
 
         node = deployer.put_node_config(name="node", config=node_config)
@@ -504,8 +497,10 @@ class TestDockerDeployerIntegration:
 
         deployer.deploy_infrastructure()
 
-        mnt_config = mount_config.MountConfig(
-            volume=volume, mount_path="/app/mounted_data", read_only=False
+        mnt_config = MountConfig(
+            volume_host_path=volume.get_name(),
+            mount_path="/app/mounted_data",
+            read_only=False,
         )
 
         node.start([mnt_config])
@@ -524,7 +519,7 @@ class TestDockerDeployerIntegration:
 
         deployer.clear_infrastructure()
 
-    def test_9_read_only_volume(self, deployer: docker_deployer.DockerDeployer):
+    def test_9_read_only_volume(self, deployer: DockerDeployer):
         node_config = NodeConfig(cpu_limit=1, mem_limit="512m", os="ubuntu:latest")
 
         node = deployer.put_node_config(name="node", config=node_config)
@@ -535,8 +530,10 @@ class TestDockerDeployerIntegration:
 
         deployer.deploy_infrastructure()
 
-        mnt_config = mount_config.MountConfig(
-            volume=volume, mount_path="/app/mounted_data", read_only=True
+        mnt_config = MountConfig(
+            volume_host_path=volume.get_name(),
+            mount_path="/app/mounted_data",
+            read_only=True,
         )
 
         node.start([mnt_config])
@@ -551,7 +548,7 @@ class TestDockerDeployerIntegration:
     # ----- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
 
     def __check_exit_code(
-        self, exec_result: exec_result.ExecResult | None, expected: int, equal: bool
+        self, exec_result: ExecResult | None, expected: int, equal: bool
     ) -> bool:
         if exec_result is None:
             return False

@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 
-from .types import Type
+from ..meta import Type
 
 
 class Entity(ABC):
