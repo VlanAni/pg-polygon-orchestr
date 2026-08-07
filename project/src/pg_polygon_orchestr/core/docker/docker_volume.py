@@ -1,12 +1,14 @@
-from ..interfaces import volume, entity_state, types
+from ..interfaces import Volume
 from ..configs.volume_config import VolumeConfig
 from ..exception import docker_exceptions, common_exceptions
 from . import docker_session
 
 import docker.errors as dockerapi_errors
 
+from ..meta import EntityState, Type
 
-class DockerVolume(volume.Volume):
+
+class DockerVolume(Volume):
     def __init__(
         self,
         name: str,
@@ -15,7 +17,7 @@ class DockerVolume(volume.Volume):
     ) -> None:
         self.__name = name
         self.__config = config
-        self.__state = entity_state.EntityState.NOT_DEPLOYED
+        self.__state = EntityState.NOT_DEPLOYED
         self.__shared_docker_session = session
         self.__volume = None
 
@@ -24,16 +26,16 @@ class DockerVolume(volume.Volume):
     def get_name(self) -> str:
         return self.__name
 
-    def get_type(self) -> types.Type:
-        return types.Type.DOCKER
+    def get_type(self) -> Type:
+        return Type.DOCKER
 
     def deploy(self) -> None:
-        if self.__is_state_as_required(required=entity_state.EntityState.REMOVED):
+        if self.__is_state_as_required(required=EntityState.REMOVED):
             raise common_exceptions.EntityIsRemovedException(
                 f"the volume {self.__name} is removed"
             )
 
-        if self.__is_state_as_required(required=entity_state.EntityState.DEPLOYED):
+        if self.__is_state_as_required(required=EntityState.DEPLOYED):
             raise common_exceptions.EntityIsAlreadyDeployed(
                 f"the volume {self.__name} is deployed"
             )
@@ -41,12 +43,12 @@ class DockerVolume(volume.Volume):
         self.__deploy()
 
     def clear(self) -> None:
-        if self.__is_state_as_required(required=entity_state.EntityState.REMOVED):
+        if self.__is_state_as_required(required=EntityState.REMOVED):
             raise common_exceptions.EntityIsRemovedException(
                 f"the volume {self.__name} is removed"
             )
 
-        if self.__is_state_as_required(required=entity_state.EntityState.NOT_DEPLOYED):
+        if self.__is_state_as_required(required=EntityState.NOT_DEPLOYED):
             raise common_exceptions.EntityIsNotDeployed(
                 f"the volume {self.__name} is not deployed"
             )
@@ -54,7 +56,7 @@ class DockerVolume(volume.Volume):
         self.__clear()
 
     def remove(self) -> None:
-        if self.__is_state_as_required(required=entity_state.EntityState.REMOVED):
+        if self.__is_state_as_required(required=EntityState.REMOVED):
             raise common_exceptions.EntityIsRemovedException(
                 f"the volume {self.__name} is removed"
             )
@@ -79,7 +81,7 @@ class DockerVolume(volume.Volume):
             )
 
         self.__volume = volume
-        self.__state = entity_state.EntityState.DEPLOYED
+        self.__state = EntityState.DEPLOYED
 
     def __clear(self) -> None:
         try:
@@ -89,11 +91,11 @@ class DockerVolume(volume.Volume):
                 f"failed to remove a docker volume {self.__name}. Maybe in used"
             ) from err
 
-        self.__state = entity_state.EntityState.NOT_DEPLOYED
+        self.__state = EntityState.NOT_DEPLOYED
         self.__volume = None
 
     def __remove(self) -> None:
-        if self.__is_state_as_required(required=entity_state.EntityState.DEPLOYED):
+        if self.__is_state_as_required(required=EntityState.DEPLOYED):
             try:
                 self.__volume.remove(force=True)  # type: ignore
             except dockerapi_errors.APIError as err:
@@ -101,11 +103,11 @@ class DockerVolume(volume.Volume):
                     f"failed to force remove a docker volume {self.__name}"
                 ) from err
 
-        self.__state = entity_state.EntityState.REMOVED
+        self.__state = EntityState.REMOVED
         self.__volume = None
         self.__config = None
 
     # ------ приватные методы
 
-    def __is_state_as_required(self, required: entity_state.EntityState) -> bool:
+    def __is_state_as_required(self, required: EntityState) -> bool:
         return self.__state == required

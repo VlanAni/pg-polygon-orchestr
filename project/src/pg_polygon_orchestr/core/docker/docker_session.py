@@ -6,8 +6,8 @@ import docker.models.volumes as dockerapi_volumes
 import docker.errors
 from pathlib import Path
 
-from ..configs import node_config, net_config, volume_config
-from ..interfaces import mount_config
+from ..configs import NodeConfig, NetConfig, VolumeConfig
+from ..meta import MountConfig
 from ..exception import docker_exceptions
 
 
@@ -20,7 +20,7 @@ class DockerClientSession:
 
     def ask_to_build_image(
         self,
-        config: node_config.NodeConfig,
+        config: NodeConfig,
         image_tag: str,
     ) -> dockerapi_images.Image:
         if self.__session is None:
@@ -53,8 +53,8 @@ class DockerClientSession:
         self,
         image: dockerapi_images.Image,
         name: str,
-        config: node_config.NodeConfig,
-        mount_configs: list[mount_config.MountConfig],
+        config: NodeConfig,
+        mount_configs: list[MountConfig],
     ) -> dockerapi_containers.Container:
         if self.__session is None:
             self.__session = docker.from_env()
@@ -125,7 +125,7 @@ class DockerClientSession:
     def ask_to_create_volume(
         self,
         volume_name: str,
-        volume_config: volume_config.VolumeConfig,
+        volume_config: VolumeConfig,
     ) -> dockerapi_volumes.Volume | None:
         if self.__session is None:
             self.__session = docker.from_env()
@@ -140,7 +140,7 @@ class DockerClientSession:
             ) from err
 
     def ask_to_create_network(
-        self, name: str, config: net_config.NetConfig
+        self, name: str, config: NetConfig
     ) -> dockerapi_networks.Network | None:
         if self.__session is None:
             self.__session = docker.from_env()
@@ -168,12 +168,12 @@ class DockerClientSession:
     # ------ приватные методы
 
     def __create_volume_mount_map(
-        self, mount_configs: list[mount_config.MountConfig]
+        self, mount_configs: list[MountConfig]
     ) -> dict[str, dict[str, str]]:
         mount_map: dict[str, dict[str, str]] = dict()
 
         for mount_config in mount_configs:
-            name = mount_config.volume.get_name()
+            name = mount_config.volume_host_path
             mount_path = mount_config.mount_path
             ro = mount_config.read_only
 

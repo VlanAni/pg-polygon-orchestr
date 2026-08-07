@@ -7,7 +7,7 @@ from .node import Node
 from .volume import Volume
 from .network import Network
 
-from ..configs import net_config, node_config, volume_config
+from ..configs import NetConfig, NodeConfig, VolumeConfig
 
 
 class Deployer(ABC):
@@ -29,17 +29,15 @@ class Deployer(ABC):
     # ----- КОНФИГУРАЦИЯ
 
     @abstractmethod
-    def put_node_config(self, name: str, config: node_config.NodeConfig) -> Node:
+    def put_node_config(self, name: str, config: NodeConfig) -> Node:
         pass
 
     @abstractmethod
-    def put_volume_config(
-        self, name: str, config: volume_config.VolumeConfig
-    ) -> Volume:
+    def put_volume_config(self, name: str, config: VolumeConfig) -> Volume:
         pass
 
     @abstractmethod
-    def put_network_config(self, name: str, config: net_config.NetConfig) -> Network:
+    def put_network_config(self, name: str, config: NetConfig) -> Network:
         pass
 
     # ----- ГЕТТЕРЫ

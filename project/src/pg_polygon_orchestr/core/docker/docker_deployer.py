@@ -2,13 +2,13 @@ from collections.abc import Mapping
 
 from ..exception import docker_exceptions
 from ..exception import common_exceptions
-from ..configs import node_config, volume_config, net_config
-from ..interfaces import deployer, node
+from ..configs import NodeConfig, VolumeConfig, NetConfig
+from ..interfaces import Deployer, Node, Network, Volume
 
 from . import docker_node, docker_volume, docker_network, docker_session
 
 
-class DockerDeployer(deployer.Deployer):
+class DockerDeployer(Deployer):
     def __init__(self) -> None:
         self.__docker_nodes: dict[str, docker_node.DockerNode] = dict()
         self.__docker_networks: dict[str, docker_network.DockerNetwork] = dict()
@@ -19,9 +19,7 @@ class DockerDeployer(deployer.Deployer):
 
     # ----- интерфейсные методы
 
-    def put_node_config(
-        self, name: str, config: node_config.NodeConfig
-    ) -> deployer.Node:
+    def put_node_config(self, name: str, config: NodeConfig) -> Node:
         search_result = self.__docker_nodes.get(name, None)
 
         if search_result is not None:
@@ -35,9 +33,7 @@ class DockerDeployer(deployer.Deployer):
 
         return d_node
 
-    def put_network_config(
-        self, name: str, config: net_config.NetConfig
-    ) -> deployer.Network:
+    def put_network_config(self, name: str, config: NetConfig) -> Network:
         search_result = self.__docker_networks.get(name, None)
 
         if search_result is not None:
@@ -51,9 +47,7 @@ class DockerDeployer(deployer.Deployer):
 
         return d_net
 
-    def put_volume_config(
-        self, name: str, config: volume_config.VolumeConfig
-    ) -> deployer.Volume:
+    def put_volume_config(self, name: str, config: VolumeConfig) -> Volume:
         search_result = self.__docker_volumes.get(name, None)
 
         if search_result is not None:
@@ -90,13 +84,13 @@ class DockerDeployer(deployer.Deployer):
 
         self.__docker_session.close()
 
-    def get_nodes(self) -> Mapping[str, node.Node]:
+    def get_nodes(self) -> Mapping[str, Node]:
         return self.__docker_nodes.copy()
 
-    def get_network(self) -> Mapping[str, deployer.Network]:
+    def get_network(self) -> Mapping[str, Network]:
         return self.__docker_networks.copy()
 
-    def get_volumes(self) -> Mapping[str, deployer.Volume]:
+    def get_volumes(self) -> Mapping[str, Volume]:
         return self.__docker_volumes.copy()
 
     # ------ докер-специфичные функции
