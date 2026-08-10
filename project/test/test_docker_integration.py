@@ -545,6 +545,128 @@ class TestDockerDeployerIntegration:
         deployer.clear_infrastructure()
         deployer.remove_infrastructure()
 
+    def test_10__two_internal_networks_and_switch(self, deployer: DockerDeployer):
+        node_config = NodeConfig(
+            os="alpine",
+            cpu_limit=1,
+            mem_limit="256m",
+            net_settings_roots=True,
+            connect_to_docker_default=False,
+        )
+
+        switch_config = NodeConfig(
+            os="alpine",
+            cpu_limit=1,
+            mem_limit="256m",
+            ip_forwarding=True,
+            connect_to_docker_default=False,
+        )
+
+        net_config = NetConfig(internal=False)
+
+        a = deployer.put_node_config(name="node_a", config=node_config)
+        b = deployer.put_node_config(name="node_b", config=node_config)
+        c = deployer.put_node_config(name="node_c", config=node_config)
+        d = deployer.put_node_config(name="node_d", config=node_config)
+
+        switch = deployer.put_node_config(name="switch", config=switch_config)
+
+        net1 = deployer.put_network_config(name="net_1", config=net_config)
+        net2 = deployer.put_network_config(name="net_2", config=net_config)
+
+        deployer.deploy_infrastructure()
+
+        a.start()
+        b.start()
+        c.start()
+        d.start()
+
+        net1.connect_node(node=a)
+        net1.connect_node(node=b)
+
+        net2.connect_node(node=c)
+        net2.connect_node(node=d)
+
+        switch.start()
+
+        net1.connect_node(node=switch)
+        net2.connect_node(node=switch)
+
+        a_ip = net1.get_node_network_ip(node=a)
+        b_ip = net1.get_node_network_ip(node=b)
+        c_ip = net2.get_node_network_ip(node=c)
+        d_ip = net2.get_node_network_ip(node=d)
+        switch_net1_ip = net1.get_node_network_ip(node=switch)
+        switch_net2_ip = net2.get_node_network_ip(node=switch)
+        net1_ip = net1.get_network_ip()
+        net2_ip = net2.get_network_ip()
+
+        # for node in [a, b, c, d]:
+        #     iproute_install = node.exec(command="apk add --no-cache iproute2")
+
+        #     assert self.__check_exit_code(iproute_install, 0, True)
+
+        for node_net_1 in [a, b]:
+            net_2_route = node_net_1.exec(
+                f"ip route add {net2_ip} via {switch_net1_ip}"
+            )
+
+            assert self.__check_exit_code(net_2_route, 0, True)
+
+        for node_net_2 in [c, d]:
+            net_1_route = node_net_2.exec(
+                f"ip route add {net1_ip} via {switch_net2_ip}"
+            )
+
+            assert self.__check_exit_code(net_1_route, 0, True)
+
+        a_ping_b = a.exec(f"ping -c 1 {b.get_name()}")
+        b_ping_a = b.exec(f"ping -c 1 {a.get_name()}")
+
+        assert self.__check_exit_code(a_ping_b, 0, True)
+        assert self.__check_exit_code(b_ping_a, 0, True)
+
+        c_ping_d = c.exec(f"ping -c 1 {d.get_name()}")
+        d_ping_c = d.exec(f"ping -c 1 {c.get_name()}")
+
+        assert self.__check_exit_code(c_ping_d, 0, True)
+        assert self.__check_exit_code(d_ping_c, 0, True)
+
+        print(f"a_ip={a_ip}, b_ip={b_ip}, c_ip={c_ip}, d_ip={d_ip}")
+        print(f"switch_net1_ip={switch_net1_ip}, switch_net2_ip={switch_net2_ip}")
+        print(f"net1_ip={net1_ip}, net2_ip={net2_ip}")
+
+        # result = switch.exec("cat /proc/sys/net/ipv4/ip_forward")
+        # print(result.stdout)
+        # print(a.exec("ip route").stdout)
+        # print(c.exec("ip route").stdout)
+        # print(switch.exec("cat /proc/sys/net/ipv4/conf/eth0/forwarding").stdout)
+        # print(switch.exec("cat /proc/sys/net/ipv4/conf/eth1/forwarding").stdout)
+        # print(switch.exec("ip addr show").stdout)
+
+        for net1_node in [a, b]:
+            ping_c = net1_node.exec(f"ping -c 1 {c_ip}")
+
+            assert self.__check_exit_code(ping_c, 0, True)
+
+            ping_d = net1_node.exec(f"ping -c 1 {d_ip}")
+
+            assert self.__check_exit_code(ping_d, 0, True)
+
+        for net2_node in [c, d]:
+            ping_a = net2_node.exec(f"ping -c 1 {a_ip}")
+
+            assert self.__check_exit_code(ping_a, 0, True)
+
+            ping_b = net2_node.exec(f"ping -c 1 {b_ip}")
+
+            assert self.__check_exit_code(ping_b, 0, True)
+
+        for node in [a, b, c, d, switch]:
+            node.stop(0)
+
+        deployer.clear_infrastructure()
+
     # ----- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
 
     def __check_exit_code(

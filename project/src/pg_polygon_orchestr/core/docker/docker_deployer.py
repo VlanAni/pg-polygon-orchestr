@@ -1,18 +1,19 @@
 from collections.abc import Mapping
+import typing
 
 from ..exception import docker_exceptions
 from ..exception import common_exceptions
 from ..configs import NodeConfig, VolumeConfig, NetConfig
-from ..interfaces import Deployer, Node, Network, Volume
+from ..abstract import Deployer, Node, Network, Volume, EntityRegistry
 
 from . import docker_node, docker_volume, docker_network, docker_session
 
 
 class DockerDeployer(Deployer):
     def __init__(self) -> None:
-        self.__docker_nodes: dict[str, docker_node.DockerNode] = dict()
-        self.__docker_networks: dict[str, docker_network.DockerNetwork] = dict()
-        self.__docker_volumes: dict[str, docker_volume.DockerVolume] = dict()
+        self.__docker_nodes: EntityRegistry = EntityRegistry()
+        self.__docker_networks: EntityRegistry = EntityRegistry()
+        self.__docker_volumes: EntityRegistry = EntityRegistry()
         self.__docker_session: docker_session.DockerClientSession = (
             docker_session.DockerClientSession()
         )
@@ -20,46 +21,49 @@ class DockerDeployer(Deployer):
     # ----- интерфейсные методы
 
     def put_node_config(self, name: str, config: NodeConfig) -> Node:
-        search_result = self.__docker_nodes.get(name, None)
-
-        if search_result is not None:
-            return search_result
-
         d_node = docker_node.DockerNode(
-            name=name, config=config, session=self.__docker_session
+            name=name,
+            config=config,
+            session=self.__docker_session,
+            shared_volume_registry=self.__docker_volumes,
         )
 
-        self.__docker_nodes[name] = d_node
-
-        return d_node
+        if self.__docker_nodes.put_object_in_registry(deployer=self, entity=d_node):
+            return d_node
+        else:
+            return typing.cast(
+                docker_node.DockerNode,
+                self.__docker_nodes.get_entity_by_name(d_node.get_name()),
+            )
 
     def put_network_config(self, name: str, config: NetConfig) -> Network:
-        search_result = self.__docker_networks.get(name, None)
-
-        if search_result is not None:
-            return search_result
-
         d_net = docker_network.DockerNetwork(
-            name=name, config=config, session=self.__docker_session
+            name=name,
+            config=config,
+            session=self.__docker_session,
+            shared_node_registry=self.__docker_nodes,
         )
 
-        self.__docker_networks[name] = d_net
-
-        return d_net
+        if self.__docker_networks.put_object_in_registry(deployer=self, entity=d_net):
+            return d_net
+        else:
+            return typing.cast(
+                docker_network.DockerNetwork,
+                self.__docker_networks.get_entity_by_name(d_net.get_name()),
+            )
 
     def put_volume_config(self, name: str, config: VolumeConfig) -> Volume:
-        search_result = self.__docker_volumes.get(name, None)
-
-        if search_result is not None:
-            return search_result
-
         d_volume = docker_volume.DockerVolume(
             name=name, config=config, session=self.__docker_session
         )
 
-        self.__docker_volumes[name] = d_volume
-
-        return d_volume
+        if self.__docker_volumes.put_object_in_registry(deployer=self, entity=d_volume):
+            return d_volume
+        else:
+            return typing.cast(
+                docker_volume.DockerVolume,
+                self.__docker_volumes.get_entity_by_name(d_volume.get_name()),
+            )
 
     def deploy_infrastructure(self) -> None:
         self.__deploy_volumes()
@@ -85,40 +89,27 @@ class DockerDeployer(Deployer):
         self.__docker_session.close()
 
     def get_nodes(self) -> Mapping[str, Node]:
-        return self.__docker_nodes.copy()
+        return typing.cast(Mapping[str, Node], self.__docker_nodes.get_name_map())
 
     def get_network(self) -> Mapping[str, Network]:
-        return self.__docker_networks.copy()
+        return typing.cast(Mapping[str, Network], self.__docker_networks.get_name_map())
 
     def get_volumes(self) -> Mapping[str, Volume]:
-        return self.__docker_volumes.copy()
-
-    # ------ докер-специфичные функции
-
-    def check_node_is_known(
-        self, who_ask: docker_network.DockerNetwork, node: docker_node.DockerNode
-    ) -> bool | None:
-        net_name = who_ask.get_name()
-
-        search_result = self.__docker_networks.get(net_name, None)
-
-        if search_result is None or not (search_result is who_ask):
-            return None
-
-        node_search_result = self.__docker_nodes.get(node.get_name(), None)
-
-        return node_search_result is not None and node_search_result is node
+        return typing.cast(Mapping[str, Volume], self.__docker_volumes.get_name_map())
 
     # ------ приватные методы
 
     def __deploy_volumes(self) -> None:
-        for volume_name in list(self.__docker_volumes.keys()):
-            volume = self.__docker_volumes[volume_name]
+        for volume_name in list(self.__docker_volumes.get_name_map().keys()):
+            volume = self.__docker_volumes.get_entity_by_name(name=volume_name)
+            volume = typing.cast(docker_volume.DockerVolume, volume)
 
             try:
                 volume.deploy()
             except common_exceptions.EntityIsRemovedException:
-                self.__docker_volumes.pop(volume_name)
+                self.__docker_volumes.pop_object_from_registry(
+                    deployer=self, entity=volume
+                )
             except common_exceptions.EntityIsAlreadyDeployed:
                 pass
             except docker_exceptions.DockerDeployError as err:
@@ -127,13 +118,16 @@ class DockerDeployer(Deployer):
                 ) from err
 
     def __deploy_networks(self) -> None:
-        for net_name in list(self.__docker_networks.keys()):
-            network = self.__docker_networks[net_name]
+        for net_name in list(self.__docker_networks.get_name_map().keys()):
+            network = self.__docker_networks.get_entity_by_name(name=net_name)
+            network = typing.cast(docker_network.DockerNetwork, network)
 
             try:
                 network.deploy()
             except common_exceptions.EntityIsRemovedException:
-                self.__docker_networks.pop(net_name)
+                self.__docker_networks.pop_object_from_registry(
+                    deployer=self, entity=network
+                )
             except common_exceptions.EntityIsAlreadyDeployed:
                 pass
             except docker_exceptions.DockerDeployError as err:
@@ -142,13 +136,14 @@ class DockerDeployer(Deployer):
                 ) from err
 
     def __deploy_nodes(self) -> None:
-        for node_name in list(self.__docker_nodes.keys()):
-            node = self.__docker_nodes[node_name]
+        for node_name in list(self.__docker_nodes.get_name_map().keys()):
+            node = self.__docker_nodes.get_entity_by_name(name=node_name)
+            node = typing.cast(docker_node.DockerNode, node)
 
             try:
                 node.deploy()
             except common_exceptions.EntityIsRemovedException:
-                self.__docker_nodes.pop(node_name)
+                self.__docker_nodes.pop_object_from_registry(deployer=self, entity=node)
             except common_exceptions.EntityIsAlreadyDeployed:
                 pass
             except docker_exceptions.DockerDeployError as err:
@@ -157,13 +152,14 @@ class DockerDeployer(Deployer):
                 ) from err
 
     def __clear_nodes(self) -> None:
-        for node_name in list(self.__docker_nodes.keys()):
-            node = self.__docker_nodes[node_name]
+        for node_name in list(self.__docker_nodes.get_name_map().keys()):
+            node = self.__docker_nodes.get_entity_by_name(name=node_name)
+            node = typing.cast(docker_node.DockerNode, node)
 
             try:
                 node.clear()
             except common_exceptions.EntityIsRemovedException:
-                self.__docker_nodes.pop(node_name)
+                self.__docker_nodes.pop_object_from_registry(deployer=self, entity=node)
             except common_exceptions.EntityIsNotDeployed:
                 pass
             except docker_exceptions.DockerClearError as err:
@@ -172,13 +168,16 @@ class DockerDeployer(Deployer):
                 ) from err
 
     def __clear_networks(self) -> None:
-        for net_name in list(self.__docker_networks.keys()):
-            network = self.__docker_networks[net_name]
+        for net_name in list(self.__docker_networks.get_name_map().keys()):
+            network = self.__docker_networks.get_entity_by_name(name=net_name)
+            network = typing.cast(docker_network.DockerNetwork, network)
 
             try:
                 network.clear()
             except common_exceptions.EntityIsRemovedException:
-                self.__docker_networks.pop(net_name)
+                self.__docker_networks.pop_object_from_registry(
+                    deployer=self, entity=network
+                )
             except common_exceptions.EntityIsNotDeployed:
                 pass
             except docker_exceptions.DockerClearError as err:
@@ -187,13 +186,16 @@ class DockerDeployer(Deployer):
                 ) from err
 
     def __clear_volumes(self) -> None:
-        for volume_name in list(self.__docker_volumes.keys()):
-            volume = self.__docker_volumes[volume_name]
+        for volume_name in list(self.__docker_volumes.get_name_map().keys()):
+            volume = self.__docker_volumes.get_entity_by_name(name=volume_name)
+            volume = typing.cast(docker_volume.DockerVolume, volume)
 
             try:
                 volume.clear()
             except common_exceptions.EntityIsRemovedException:
-                self.__docker_volumes.pop(volume_name)
+                self.__docker_volumes.pop_object_from_registry(
+                    deployer=self, entity=volume
+                )
             except common_exceptions.EntityIsNotDeployed:
                 pass
             except docker_exceptions.DockerClearError as err:
@@ -202,39 +204,46 @@ class DockerDeployer(Deployer):
                 ) from err
 
     def __remove_nodes(self) -> None:
-        for node_name in list(self.__docker_nodes.keys()):
-            node = self.__docker_nodes[node_name]
+        for node_name in list(self.__docker_nodes.get_name_map().keys()):
+            node = self.__docker_nodes.get_entity_by_name(name=node_name)
+            node = typing.cast(docker_node.DockerNode, node)
 
             try:
                 node.remove()
             except common_exceptions.EntityIsRemovedException:
-                self.__docker_nodes.pop(node_name)
+                self.__docker_nodes.pop_object_from_registry(deployer=self, entity=node)
             except docker_exceptions.DockerRemoveError as err:
                 raise docker_exceptions.DockerRemoveError(
                     f"failed to remove the node {node_name}"
                 ) from err
 
     def __remove_networks(self) -> None:
-        for net_name in list(self.__docker_networks.keys()):
-            network = self.__docker_networks[net_name]
+        for net_name in list(self.__docker_networks.get_name_map().keys()):
+            network = self.__docker_networks.get_entity_by_name(name=net_name)
+            network = typing.cast(docker_network.DockerNetwork, network)
 
             try:
                 network.remove()
             except common_exceptions.EntityIsRemovedException:
-                self.__docker_networks.pop(net_name)
+                self.__docker_networks.pop_object_from_registry(
+                    deployer=self, entity=network
+                )
             except docker_exceptions.DockerRemoveError as err:
                 raise docker_exceptions.DockerRemoveError(
                     f"failed to remove the network {net_name}"
                 ) from err
 
     def __remove_volumes(self) -> None:
-        for volume_name in list(self.__docker_volumes.keys()):
-            volume = self.__docker_volumes[volume_name]
+        for volume_name in list(self.__docker_volumes.get_name_map().keys()):
+            volume = self.__docker_volumes.get_entity_by_name(name=volume_name)
+            volume = typing.cast(docker_volume.DockerVolume, volume)
 
             try:
                 volume.remove()
             except common_exceptions.EntityIsRemovedException:
-                self.__docker_volumes.pop(volume_name)
+                self.__docker_volumes.pop_object_from_registry(
+                    deployer=self, entity=volume
+                )
             except docker_exceptions.DockerRemoveError as err:
                 raise docker_exceptions.DockerRemoveError(
                     f"failed to remove the volume {volume_name}"

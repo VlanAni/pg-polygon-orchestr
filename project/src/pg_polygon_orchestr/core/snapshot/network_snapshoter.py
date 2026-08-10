@@ -1,0 +1,2 @@
+class NetworkSnapshoter:
+    pass

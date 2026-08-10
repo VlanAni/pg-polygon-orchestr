@@ -3,27 +3,33 @@ import docker.errors
 import docker.models.images as docker_images
 import docker.models.containers as docker_containers
 import time
+import uuid
 
 from ..configs import NodeConfig
 from ..exception import docker_exceptions, common_exceptions
-from ..interfaces import Node
+from ..abstract import Node, EntityRegistry
 from . import docker_session
 from ..meta import MountConfig, Type, EntityState, ExecResult
 
 
 class DockerNode(Node):
     def __init__(
-        self, name: str, config: NodeConfig, session: docker_session.DockerClientSession
+        self,
+        name: str,
+        config: NodeConfig,
+        session: docker_session.DockerClientSession,
+        shared_volume_registry: EntityRegistry,
     ) -> None:
         self.__name = name
         self.__config = config
-        self.__shared_client_session: docker_session.DockerClientSession = (
-            docker_session.DockerClientSession()
-        )
+        self.__shared_client_session: docker_session.DockerClientSession = session
         self.__image_name: str = ""
         self.__state: EntityState = EntityState.NOT_DEPLOYED
         self.__docker_image: docker_images.Image | None = None
         self.__docker_container: docker_containers.Container | None = None
+        self.__uuid: uuid.UUID = uuid.uuid4()
+        self.__mounted_volumes: dict[uuid.UUID, bool] = dict()
+        self.__infrastructure_volumes: EntityRegistry = shared_volume_registry
 
     # ----- Интерфейсные методы
 
@@ -114,6 +120,9 @@ class DockerNode(Node):
     def get_name(self) -> str:
         return self.__name
 
+    def get_id(self) -> uuid.UUID:
+        return self.__uuid
+
     # ------ приватные коллбеки
 
     def __deploy(self) -> None:
@@ -148,6 +157,7 @@ class DockerNode(Node):
         self.__docker_container = None
         self.__image_name = ""
         self.__docker_image = None
+        self.__mounted_volumes.clear()
         self.__state = EntityState.NOT_DEPLOYED
 
     def __remove(self) -> None:
@@ -169,11 +179,25 @@ class DockerNode(Node):
         self.__image_name = ""
         self.__docker_image = None
         self.__config = None
+        self.__mounted_volumes.clear()
         self.__state = EntityState.REMOVED
 
     def __start(self, mount_configs: list[MountConfig] = []) -> None:
         if self.__docker_container is None:
             try:
+                for mnt_cfg in mount_configs:
+                    search_result = self.__infrastructure_volumes.get_entity_by_name(
+                        name=mnt_cfg.volume_host_path
+                    )
+                    if search_result is None:
+                        self.__mounted_volumes.clear()
+
+                        raise docker_exceptions.DockerContStartError(
+                            f"the volume {mnt_cfg.volume_host_path} is not known"
+                        )
+                    else:
+                        self.__mounted_volumes[search_result.get_id()] = True
+
                 container = self.__shared_client_session.ask_to_create_a_container(  # type: ignore
                     image=self.__docker_image,  # type: ignore
                     config=self.__config,  # type: ignore
@@ -183,6 +207,8 @@ class DockerNode(Node):
 
                 self.__docker_container = container
             except docker_exceptions.ResourceCreationError as err:
+                self.__mounted_volumes.clear()
+
                 raise docker_exceptions.DockerContStartError(
                     f"failed to create a docker container for the node {self.__name}"
                 ) from err

@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from uuid import UUID
 
 from ..meta import Type
 
@@ -23,4 +24,8 @@ class Entity(ABC):
 
     @abstractmethod
     def get_name(self) -> str:
+        pass
+
+    @abstractmethod
+    def get_id(self) -> UUID:
         pass

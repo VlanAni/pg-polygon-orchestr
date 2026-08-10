@@ -1,10 +1,11 @@
-from ..interfaces import Network, Node
+from ..abstract import Network, Node, EntityRegistry
 from ..configs import NetConfig
 from . import docker_session, docker_node
 from ..exception import docker_exceptions, common_exceptions
 
 import docker.errors
 import typing
+import uuid
 
 from ..meta import EntityState, Type
 
@@ -15,12 +16,16 @@ class DockerNetwork(Network):
         name: str,
         config: NetConfig,
         session: docker_session.DockerClientSession,
+        shared_node_registry: EntityRegistry,
     ):
         self.__name = name
         self.__config = config
         self.__shared_docker_session = session
         self.__state = EntityState.NOT_DEPLOYED
         self.__network = None
+        self.__uuid: uuid.UUID = uuid.uuid4()
+        self.__infrastructure_nodes: EntityRegistry = shared_node_registry
+        self.__connected_uuids: dict[uuid.UUID, bool] = dict()
 
     # ------ интерфейсные методы
 
@@ -29,6 +34,9 @@ class DockerNetwork(Network):
 
     def get_type(self) -> Type:
         return Type.DOCKER
+
+    def get_id(self) -> uuid.UUID:
+        return self.__uuid
 
     def deploy(self) -> None:
         if self.__is_state_as_required(required=EntityState.REMOVED):
@@ -150,6 +158,7 @@ class DockerNetwork(Network):
             ) from err
 
         self.__network = None
+        self.__connected_uuids.clear()
         self.__state = EntityState.NOT_DEPLOYED
 
     def __remove(self) -> None:
@@ -163,6 +172,7 @@ class DockerNetwork(Network):
 
         self.__network = None
         self.__state = EntityState.REMOVED
+        self.__connected_uuids.clear()
         self.__config = None
 
     def __connect_node(self, node: Node) -> None:
@@ -171,6 +181,16 @@ class DockerNetwork(Network):
         else:
             raise docker_exceptions.ConnectToDockerNetError(
                 f"the node {node.get_name()} is not a docker node"
+            )
+
+        if self.__infrastructure_nodes.get_entity_by_id(uuid=d_node.get_id()) is None:
+            raise docker_exceptions.ConnectToDockerNetError(
+                f"the node {d_node.get_name()} with id {d_node.get_id} is not known"
+            )
+
+        if self.__connected_uuids.get(d_node.get_id(), None) is not None:
+            raise docker_exceptions.ConnectToDockerNetError(
+                f"the node {d_node.get_name()} with id {d_node.get_id()} is already connected"
             )
 
         container_id = d_node.share_container_id()
@@ -182,6 +202,7 @@ class DockerNetwork(Network):
 
         try:
             self.__network.connect(container=container_id)  # type: ignore
+            self.__connected_uuids[d_node.get_id()] = True
         except docker.errors.APIError as err:
             raise docker_exceptions.ConnectToDockerNetError(
                 f"failed to connect the container {d_node.get_name()} with id {container_id} to the network {self.__name}"
@@ -191,21 +212,32 @@ class DockerNetwork(Network):
         if node.get_type() is Type.DOCKER:
             d_node = typing.cast(docker_node.DockerNode, val=node)
         else:
-            raise docker_exceptions.ConnectToDockerNetError(
+            raise docker_exceptions.DisconnectFromDockerNetError(
                 f"the node {node.get_name()} is not a docker node"
+            )
+
+        if self.__infrastructure_nodes.get_entity_by_id(d_node.get_id()) is None:
+            raise docker_exceptions.DisconnectFromDockerNetError(
+                f"the node {d_node.get_name()} with id {d_node.get_id()} is not known"
+            )
+
+        if self.__connected_uuids.get(d_node.get_id(), None) is None:
+            raise docker_exceptions.DisconnectFromDockerNetError(
+                f"the node {d_node.get_name()} with id {d_node.get_id()} is already disconnected"
             )
 
         container_id = d_node.share_container_id()
 
         if container_id is None:
-            raise docker_exceptions.ConnectToDockerNetError(
+            raise docker_exceptions.DisconnectFromDockerNetError(
                 f"the node {d_node.get_name()} doesn't have alive container. Maybe removed / not_deployer / hasn't been started"
             )
 
         try:
             self.__network.disconnect(container=container_id)  # type: ignore
+            self.__connected_uuids.pop(d_node.get_id())
         except docker.errors.APIError as err:
-            raise docker_exceptions.ConnectToDockerNetError(
+            raise docker_exceptions.DisconnectFromDockerNetError(
                 f"failed to disconnect the container {d_node.get_name()} with id {container_id} from the network {self.__name}"
             ) from err
 
@@ -215,6 +247,16 @@ class DockerNetwork(Network):
         else:
             raise docker_exceptions.GetContainerIpError(
                 f"the node {node.get_name()} is not a docker node"
+            )
+
+        if self.__infrastructure_nodes.get_entity_by_id(uuid=d_node.get_id()) is None:
+            raise docker_exceptions.GetContainerIpError(
+                f"the node {d_node.get_name()} with id {d_node.get_id} is not known"
+            )
+
+        if self.__connected_uuids.get(d_node.get_id(), None) is None:
+            raise docker_exceptions.GetContainerIpError(
+                f"the node {d_node.get_name()} with id {d_node.get_id()} is disconnected"
             )
 
         container_id = d_node.share_container_id()

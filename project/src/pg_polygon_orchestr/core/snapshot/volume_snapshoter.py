@@ -1,0 +1,2 @@
+class VolumeSnapshoter:
+    pass

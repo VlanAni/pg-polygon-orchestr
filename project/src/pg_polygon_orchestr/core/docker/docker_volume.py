@@ -1,9 +1,10 @@
-from ..interfaces import Volume
+from ..abstract import Volume
 from ..configs.volume_config import VolumeConfig
 from ..exception import docker_exceptions, common_exceptions
 from . import docker_session
 
 import docker.errors as dockerapi_errors
+import uuid
 
 from ..meta import EntityState, Type
 
@@ -20,6 +21,7 @@ class DockerVolume(Volume):
         self.__state = EntityState.NOT_DEPLOYED
         self.__shared_docker_session = session
         self.__volume = None
+        self.__uuid: uuid.UUID = uuid.uuid4()
 
     # ------ интерфейсные методы
 
@@ -62,6 +64,9 @@ class DockerVolume(Volume):
             )
 
         self.__remove()
+
+    def get_id(self) -> uuid.UUID:
+        return self.__uuid
 
     # ------ приватные коллбеки
 

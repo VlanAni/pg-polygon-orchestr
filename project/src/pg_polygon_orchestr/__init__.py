@@ -2,7 +2,7 @@ from .core.configs import NetConfig, NodeConfig, VolumeConfig
 
 from .core.docker import DockerDeployer
 
-from .core.interfaces import (
+from .core.abstract import (
     Deployer,
     Node,
     Network,
