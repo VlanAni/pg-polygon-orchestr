@@ -70,6 +70,10 @@ class BuildFromStepsError(Exception):
     pass
 
 
+class TryToSerializeRemovedEntity(Exception):
+    pass
+
+
 # ------ STATE CHECK ERRORS
 
 

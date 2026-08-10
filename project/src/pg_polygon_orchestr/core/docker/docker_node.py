@@ -1,3 +1,5 @@
+from typing import Any, Mapping
+
 import docker
 import docker.errors
 import docker.models.images as docker_images
@@ -28,7 +30,7 @@ class DockerNode(Node):
         self.__docker_image: docker_images.Image | None = None
         self.__docker_container: docker_containers.Container | None = None
         self.__uuid: uuid.UUID = uuid.uuid4()
-        self.__mounted_volumes: dict[uuid.UUID, bool] = dict()
+        self.__mounted_volumes: dict[uuid.UUID, MountConfig] = dict()
         self.__infrastructure_volumes: EntityRegistry = shared_volume_registry
 
     # ----- Интерфейсные методы
@@ -123,6 +125,30 @@ class DockerNode(Node):
     def get_id(self) -> uuid.UUID:
         return self.__uuid
 
+    def serialize_to_json(self) -> Mapping[str, Any]:
+        if self.__is_state_as_required(required=EntityState.REMOVED):
+            raise common_exceptions.TryToSerializeRemovedEntity(
+                f"the node {self.__name} is removed"
+            )
+
+        if self.__is_state_as_required(required=EntityState.NOT_DEPLOYED):
+            raise common_exceptions.TryToSerializeRemovedEntity(
+                f"the node {self.__name} is not deployed"
+            )
+
+        return {
+            "type": "docker",
+            "uuid": str(self.__uuid),
+            "name": self.__name,
+            "state": (
+                "NOT DEPLOYED"
+                if self.__is_state_as_required(required=EntityState.NOT_DEPLOYED)
+                else "DEPLOYED"
+            ),
+            "volumes": self.__serialize_mounted_volumes(),
+            "config": self.__config.serialize(),  # type: ignore
+        }
+
     # ------ приватные коллбеки
 
     def __deploy(self) -> None:
@@ -196,7 +222,7 @@ class DockerNode(Node):
                             f"the volume {mnt_cfg.volume_host_path} is not known"
                         )
                     else:
-                        self.__mounted_volumes[search_result.get_id()] = True
+                        self.__mounted_volumes[search_result.get_id()] = mnt_cfg
 
                 container = self.__shared_client_session.ask_to_create_a_container(  # type: ignore
                     image=self.__docker_image,  # type: ignore
@@ -313,3 +339,17 @@ class DockerNode(Node):
 
     def __is_state_as_required(self, required: EntityState) -> bool:
         return self.__state is required
+
+    def __serialize_mounted_volumes(self) -> dict[str, dict[str, Any]]:
+        result: dict[str, dict[str, Any]] = dict()
+
+        for uuid in self.__mounted_volumes.keys():
+            mnt_config = self.__mounted_volumes[uuid]
+
+            result[str(uuid)] = {
+                "name": mnt_config.volume_host_path,
+                "mount_path": mnt_config.mount_path,
+                "read_only": mnt_config.read_only,
+            }
+
+        return result

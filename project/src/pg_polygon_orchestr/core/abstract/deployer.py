@@ -1,7 +1,7 @@
 # abstract class for deploying nodes using its config
 
 from abc import ABC, abstractmethod
-from collections.abc import Mapping
+from typing import Any, Mapping
 
 from .node import Node
 from .volume import Volume
@@ -52,4 +52,10 @@ class Deployer(ABC):
 
     @abstractmethod
     def get_network(self) -> Mapping[str, Network]:
+        pass
+
+    # ----- SNAPSHOTS
+
+    @abstractmethod
+    def serialize_to_json(self) -> Mapping[str, Any]:
         pass

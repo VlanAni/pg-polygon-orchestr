@@ -1,4 +1,5 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, asdict
+import typing
 
 
 @dataclass(frozen=True)
@@ -9,5 +10,7 @@ class NodeConfig:
     ip_forwarding: bool = False
     net_settings_roots: bool = False
     storage_limit: str = ""
-    program_to_execute: str = ""
     connect_to_docker_default: bool = True
+
+    def serialize(self) -> typing.Mapping[str, typing.Any]:
+        return asdict(self)

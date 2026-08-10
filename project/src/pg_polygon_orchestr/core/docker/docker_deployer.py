@@ -1,5 +1,6 @@
 from collections.abc import Mapping
 import typing
+import uuid
 
 from ..exception import docker_exceptions
 from ..exception import common_exceptions
@@ -11,6 +12,7 @@ from . import docker_node, docker_volume, docker_network, docker_session
 
 class DockerDeployer(Deployer):
     def __init__(self) -> None:
+        self.__uuid: uuid.UUID = uuid.uuid4()
         self.__docker_nodes: EntityRegistry = EntityRegistry()
         self.__docker_networks: EntityRegistry = EntityRegistry()
         self.__docker_volumes: EntityRegistry = EntityRegistry()
@@ -96,6 +98,19 @@ class DockerDeployer(Deployer):
 
     def get_volumes(self) -> Mapping[str, Volume]:
         return typing.cast(Mapping[str, Volume], self.__docker_volumes.get_name_map())
+
+    def serialize_to_json(self) -> Mapping[str, typing.Any]:
+        return {
+            "type": "docker",
+            "uuid": str(self.__uuid),
+            "nodes": [str(uuid) for uuid in self.__docker_nodes.get_uuid_map().keys()],
+            "networks": [
+                str(uuid) for uuid in self.__docker_networks.get_uuid_map().keys()
+            ],
+            "volumes": [
+                str(uuid) for uuid in self.__docker_volumes.get_uuid_map().keys()
+            ],
+        }
 
     # ------ приватные методы
 

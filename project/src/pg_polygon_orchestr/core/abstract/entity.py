@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from uuid import UUID
+import typing
 
 from ..meta import Type
 
@@ -28,4 +29,8 @@ class Entity(ABC):
 
     @abstractmethod
     def get_id(self) -> UUID:
+        pass
+
+    @abstractmethod
+    def serialize_to_json(self) -> typing.Mapping[str, typing.Any]:
         pass
