@@ -4,6 +4,8 @@ pytest -m integration test/integration/test_docker_integration.py -v
 
 import docker
 import pytest
+import os
+import pathlib
 
 from pg_polygon_orchestr import NodeConfig
 from pg_polygon_orchestr import NetConfig
@@ -545,6 +547,8 @@ class TestDockerDeployerIntegration:
         deployer.clear_infrastructure()
         deployer.remove_infrastructure()
 
+    # ----- ТЕСТЫ ДЛЯ ЭКСПЕРИМЕНТОВ
+
     def test_10__two_internal_networks_and_switch(self, deployer: DockerDeployer):
         node_config = NodeConfig(
             os="alpine",
@@ -601,11 +605,6 @@ class TestDockerDeployerIntegration:
         net1_ip = net1.get_network_ip()
         net2_ip = net2.get_network_ip()
 
-        # for node in [a, b, c, d]:
-        #     iproute_install = node.exec(command="apk add --no-cache iproute2")
-
-        #     assert self.__check_exit_code(iproute_install, 0, True)
-
         for node_net_1 in [a, b]:
             net_2_route = node_net_1.exec(
                 f"ip route add {net2_ip} via {switch_net1_ip}"
@@ -632,18 +631,6 @@ class TestDockerDeployerIntegration:
         assert self.__check_exit_code(c_ping_d, 0, True)
         assert self.__check_exit_code(d_ping_c, 0, True)
 
-        print(f"a_ip={a_ip}, b_ip={b_ip}, c_ip={c_ip}, d_ip={d_ip}")
-        print(f"switch_net1_ip={switch_net1_ip}, switch_net2_ip={switch_net2_ip}")
-        print(f"net1_ip={net1_ip}, net2_ip={net2_ip}")
-
-        # result = switch.exec("cat /proc/sys/net/ipv4/ip_forward")
-        # print(result.stdout)
-        # print(a.exec("ip route").stdout)
-        # print(c.exec("ip route").stdout)
-        # print(switch.exec("cat /proc/sys/net/ipv4/conf/eth0/forwarding").stdout)
-        # print(switch.exec("cat /proc/sys/net/ipv4/conf/eth1/forwarding").stdout)
-        # print(switch.exec("ip addr show").stdout)
-
         for net1_node in [a, b]:
             ping_c = net1_node.exec(f"ping -c 1 {c_ip}")
 
@@ -666,6 +653,59 @@ class TestDockerDeployerIntegration:
             node.stop(0)
 
         deployer.clear_infrastructure()
+
+    # ----- ТЕСТЫ ДЛЯ СНЭПШОТОВ
+
+    def test_11_test_making_snapshot(self, deployer: DockerDeployer):
+        node_config = NodeConfig(os="alpine", cpu_limit=1, mem_limit="256m")
+
+        net_config = NetConfig(internal=False)
+
+        volume_config = VolumeConfig(docker_volume_driver="local")
+
+        node = deployer.put_node_config("node_a", config=node_config)
+        net = deployer.put_network_config("net", config=net_config)
+        vol = deployer.put_volume_config("vol", config=volume_config)
+
+        node.deploy()
+        net.deploy()
+        vol.deploy()
+
+        node.start(
+            [
+                MountConfig(
+                    volume_host_path=vol.get_name(),
+                    mount_path="/app/data",
+                    read_only=False,
+                )
+            ]
+        )
+
+        net.connect_node(node=node)
+
+        deployer.make_snapshot()
+
+        snapshot_dir = os.path.join(
+            pathlib.Path.home(), ".pg-polygon-orchestr", "snapshots"
+        )
+
+        assert os.path.exists(path=snapshot_dir)
+
+        assert os.path.exists(
+            os.path.join(snapshot_dir, f"{str(deployer.get_id())}.tar.gz")
+        )
+
+        os.remove(path=os.path.join(snapshot_dir, f"{str(deployer.get_id())}.tar.gz"))
+
+        deployer.make_snapshot(snapshot_name="my_test_snapshot")
+
+        assert not os.path.exists(
+            os.path.join(snapshot_dir, f"{str(deployer.get_id())}.tar.gz")
+        )
+
+        assert os.path.exists(os.path.join(snapshot_dir, "my_test_snapshot.tar.gz"))
+
+        os.remove(path=os.path.join(snapshot_dir, "my_test_snapshot.tar.gz"))
 
     # ----- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
 

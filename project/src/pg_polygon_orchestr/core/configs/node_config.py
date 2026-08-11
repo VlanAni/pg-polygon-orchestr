@@ -1,9 +1,11 @@
-from dataclasses import dataclass, asdict
+from dataclasses import dataclass, fields
 import typing
+
+from ..serializable import Serializable
 
 
 @dataclass(frozen=True)
-class NodeConfig:
+class NodeConfig(Serializable):
     os: str
     cpu_limit: int
     mem_limit: str
@@ -13,4 +15,12 @@ class NodeConfig:
     connect_to_docker_default: bool = True
 
     def serialize(self) -> typing.Mapping[str, typing.Any]:
-        return asdict(self)
+        result: dict[str, typing.Any] = dict()
+
+        for f in fields(self):
+            f_name = f.name
+            f_value = getattr(self, f_name)
+
+            result[f_name] = f_value
+
+        return result

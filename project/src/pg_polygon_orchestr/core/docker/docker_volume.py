@@ -70,25 +70,13 @@ class DockerVolume(Volume):
     def get_id(self) -> uuid.UUID:
         return self.__uuid
 
-    def serialize_to_json(self) -> Mapping[str, Any]:
-        if self.__is_state_as_required(required=EntityState.REMOVED):
-            raise common_exceptions.TryToSerializeRemovedEntity(
-                f"the volume {self.__name} is removed"
-            )
-
+    def transform_to_mapping(self) -> Mapping[str, Any]:
         return {
-            "type": "docker",
-            "uuid": str(self.__uuid),
+            "type": Type.DOCKER,
+            "uuid": self.__uuid,
             "name": self.__name,
-            "state": (
-                "NOT DEPLOYED"
-                if self.__is_state_as_required(required=EntityState.NOT_DEPLOYED)
-                else "DEPLOYED"
-            ),
-            "config": {
-                "driver": self.__config.docker_volume_driver,  # type: ignore
-                "driver-opts": self.__config.docker_driver_options,  # type: ignore
-            },
+            "state": self.__state,
+            "config": self.__config,
         }
 
     # ------ приватные коллбеки

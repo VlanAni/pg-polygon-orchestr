@@ -125,28 +125,22 @@ class DockerNode(Node):
     def get_id(self) -> uuid.UUID:
         return self.__uuid
 
-    def serialize_to_json(self) -> Mapping[str, Any]:
+    def transform_to_mapping(self) -> Mapping[str, Any]:
         if self.__is_state_as_required(required=EntityState.REMOVED):
             raise common_exceptions.TryToSerializeRemovedEntity(
                 f"the node {self.__name} is removed"
             )
 
-        if self.__is_state_as_required(required=EntityState.NOT_DEPLOYED):
-            raise common_exceptions.TryToSerializeRemovedEntity(
-                f"the node {self.__name} is not deployed"
-            )
-
         return {
-            "type": "docker",
-            "uuid": str(self.__uuid),
+            "type": Type.DOCKER,
+            "uuid": self.__uuid,
             "name": self.__name,
-            "state": (
-                "NOT DEPLOYED"
-                if self.__is_state_as_required(required=EntityState.NOT_DEPLOYED)
-                else "DEPLOYED"
-            ),
-            "volumes": self.__serialize_mounted_volumes(),
-            "config": self.__config.serialize(),  # type: ignore
+            "state": self.__state,
+            "volumes": {
+                str(vol_id): mount_cfg
+                for vol_id, mount_cfg in self.__mounted_volumes.items()
+            },
+            "config": self.__config,
         }
 
     # ------ приватные коллбеки
@@ -326,7 +320,7 @@ class DockerNode(Node):
                     f"server returns an error: {err}"
                 ) from err
 
-    # ------ докер-специфичные функции
+    # ------ докер-специфичные функции (пользователю они не нужны)
 
     def share_container_id(self) -> str | None:
         if self.__docker_container is None:
@@ -339,17 +333,3 @@ class DockerNode(Node):
 
     def __is_state_as_required(self, required: EntityState) -> bool:
         return self.__state is required
-
-    def __serialize_mounted_volumes(self) -> dict[str, dict[str, Any]]:
-        result: dict[str, dict[str, Any]] = dict()
-
-        for uuid in self.__mounted_volumes.keys():
-            mnt_config = self.__mounted_volumes[uuid]
-
-            result[str(uuid)] = {
-                "name": mnt_config.volume_host_path,
-                "mount_path": mnt_config.mount_path,
-                "read_only": mnt_config.read_only,
-            }
-
-        return result

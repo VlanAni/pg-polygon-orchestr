@@ -131,7 +131,7 @@ class DockerNetwork(Network):
 
         return self.__get_node_network_ip(node=node, ipv6=ipv6)
 
-    def serialize_to_json(self) -> typing.Mapping[str, typing.Any]:
+    def transform_to_mapping(self) -> typing.Mapping[str, typing.Any]:
         if self.__is_state_as_required(required=EntityState.REMOVED):
             raise common_exceptions.TryToSerializeRemovedEntity(
                 f"the volume {self.__name} is removed"
@@ -139,21 +139,17 @@ class DockerNetwork(Network):
 
         try:
             return {
-                "type": "docker",
-                "uuid": str(self.__uuid),
+                "type": Type.DOCKER,
+                "uuid": self.__uuid,
                 "name": self.__name,
-                "state": (
-                    "NOT DEPLOYED"
-                    if self.__is_state_as_required(required=EntityState.NOT_DEPLOYED)
-                    else "DEPLOYED"
-                ),
+                "state": self.__state,
                 "network_ip": (
                     self.get_network_ip()
                     if self.__is_state_as_required(required=EntityState.DEPLOYED)
                     else None
                 ),
                 "connected_nodes": self.__serialyze_connected_nodes(),
-                "config": self.__config.serialize(),  # type: ignore
+                "config": self.__config,
             }
         except common_exceptions.MakeSnapshotError as err:
             raise common_exceptions.MakeSnapshotError(
@@ -350,7 +346,7 @@ class DockerNetwork(Network):
             node = self.__infrastructure_nodes.get_entity_by_id(uuid=node_uuid)
             node = typing.cast(docker_node.DockerNode, node)
 
-            if self.__config.ipv4:  # type: ignore
+            if not (self.__config.ipv4):  # type: ignore
                 ipv4 = ""
             else:
                 try:
@@ -360,7 +356,7 @@ class DockerNetwork(Network):
                         f"cannot get ipv4 address of the node {node.get_name()} in the network {self.__name}"
                     ) from err
 
-            if self.__config.ipv6:  # type: ignore
+            if not (self.__config.ipv6):  # type: ignore
                 ipv6 = ""
             else:
                 try:
@@ -370,6 +366,6 @@ class DockerNetwork(Network):
                         f"cannot get ipv6 address of the node {node.get_name()} in the network {self.__name}"
                     ) from err
 
-            result[str(self.__uuid)] = {"ipv4": ipv4, "ipv6": ipv6}
+            result[str(node_uuid)] = {"ipv4": ipv4, "ipv6": ipv6}
 
         return result

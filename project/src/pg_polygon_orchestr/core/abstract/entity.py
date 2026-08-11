@@ -32,5 +32,5 @@ class Entity(ABC):
         pass
 
     @abstractmethod
-    def serialize_to_json(self) -> typing.Mapping[str, typing.Any]:
+    def transform_to_mapping(self) -> typing.Mapping[str, typing.Any]:
         pass

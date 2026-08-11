@@ -6,6 +6,8 @@ from ..exception import docker_exceptions
 from ..exception import common_exceptions
 from ..configs import NodeConfig, VolumeConfig, NetConfig
 from ..abstract import Deployer, Node, Network, Volume, EntityRegistry
+from ..meta import Type
+from ..snapshot import MakeSnapshotHelper
 
 from . import docker_node, docker_volume, docker_network, docker_session
 
@@ -99,18 +101,64 @@ class DockerDeployer(Deployer):
     def get_volumes(self) -> Mapping[str, Volume]:
         return typing.cast(Mapping[str, Volume], self.__docker_volumes.get_name_map())
 
-    def serialize_to_json(self) -> Mapping[str, typing.Any]:
+    def get_id(self) -> uuid.UUID:
+        return self.__uuid
+
+    def transform_to_mapping(self) -> Mapping[str, typing.Any]:
         return {
-            "type": "docker",
-            "uuid": str(self.__uuid),
-            "nodes": [str(uuid) for uuid in self.__docker_nodes.get_uuid_map().keys()],
-            "networks": [
-                str(uuid) for uuid in self.__docker_networks.get_uuid_map().keys()
-            ],
-            "volumes": [
-                str(uuid) for uuid in self.__docker_volumes.get_uuid_map().keys()
-            ],
+            "type": Type.DOCKER,
+            "uuid": self.__uuid,
+            "nodes": list(self.__docker_nodes.get_uuid_map().keys()),
+            "networks": list(self.__docker_networks.get_uuid_map().keys()),
+            "volumes": list(self.__docker_volumes.get_uuid_map().keys()),
         }
+
+    def make_snapshot(self, snapshot_name: str = "") -> None:
+        with MakeSnapshotHelper(
+            archive_name=snapshot_name if snapshot_name else self.__uuid
+        ) as s:
+            try:
+                s.add_json_object_info(tag="meta.json", obj=self)
+            except common_exceptions.MakeSnapshotError as err:
+                s.delete_in_bad_case()
+
+                raise common_exceptions.MakeSnapshotError(
+                    f"failed to serialize deployer's info"
+                ) from err
+
+            for volume_uuid, volume in self.__docker_volumes.get_uuid_map().items():
+                try:
+                    s.add_json_object_info(
+                        tag=f"volumes/{str(volume_uuid)}.json", obj=volume
+                    )
+                except common_exceptions.MakeSnapshotError as err:
+                    s.delete_in_bad_case()
+
+                    raise common_exceptions.MakeSnapshotError(
+                        f"failed to serialize the volume {volume.get_name()} with id {str(volume_uuid)}"
+                    ) from err
+
+            for network_uuid, network in self.__docker_networks.get_uuid_map().items():
+                try:
+                    s.add_json_object_info(
+                        tag=f"networks/{str(network_uuid)}.json", obj=network
+                    )
+                except common_exceptions.MakeSnapshotError as err:
+                    s.delete_in_bad_case()
+
+                    raise common_exceptions.MakeSnapshotError(
+                        f"failed to serialize the volume {network.get_name()} with id {str(network_uuid)}"
+                    ) from err
+
+            for node_uuid, node in self.__docker_nodes.get_uuid_map().items():
+                try:
+                    s.add_json_object_info(tag=f"nodes/{str(node_uuid)}.json", obj=node)
+                except common_exceptions.MakeSnapshotError as err:
+                    s.delete_in_bad_case()
+
+                    raise common_exceptions.MakeSnapshotError(
+                        f"failed to serialize the node {node.get_name()} with id {str(node_uuid)}"
+                    ) from err
 
     # ------ приватные методы
 
