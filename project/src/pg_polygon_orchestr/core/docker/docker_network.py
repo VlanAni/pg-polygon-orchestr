@@ -17,13 +17,14 @@ class DockerNetwork(Network):
         config: NetConfig,
         session: docker_session.DockerClientSession,
         shared_node_registry: EntityRegistry,
+        id: uuid.UUID | None = None,
     ):
         self.__name = name
         self.__config = config
         self.__shared_docker_session = session
         self.__state = EntityState.NOT_DEPLOYED
         self.__network = None
-        self.__uuid: uuid.UUID = uuid.uuid4()
+        self.__uuid: uuid.UUID = uuid.uuid4() if id is None else id
         self.__infrastructure_nodes: EntityRegistry = shared_node_registry
         self.__connected_uuids: dict[uuid.UUID, bool] = dict()
 
@@ -92,7 +93,9 @@ class DockerNetwork(Network):
 
         return self.__network.attrs["IPAM"]["Config"][0]["Subnet"]  # type: ignore
 
-    def connect_node(self, node: Node) -> None:
+    def connect_node(
+        self, node: Node, ipv4_addr: str | None = None, ipv6_addr: str | None = None
+    ) -> None:
         if self.__is_state_as_required(required=EntityState.REMOVED):
             raise common_exceptions.EntityIsRemovedException(
                 f"the network {self.__name} is removed"
@@ -143,8 +146,13 @@ class DockerNetwork(Network):
                 "uuid": self.__uuid,
                 "name": self.__name,
                 "state": self.__state,
-                "network_ip": (
+                "network-ip": (
                     self.get_network_ip()
+                    if self.__is_state_as_required(required=EntityState.DEPLOYED)
+                    else None
+                ),
+                "gateway-ip": (
+                    self.__extract_gateway_addr()
                     if self.__is_state_as_required(required=EntityState.DEPLOYED)
                     else None
                 ),
@@ -200,7 +208,9 @@ class DockerNetwork(Network):
         self.__connected_uuids.clear()
         self.__config = None
 
-    def __connect_node(self, node: Node) -> None:
+    def __connect_node(
+        self, node: Node, ipv4_addr: str | None = None, ipv6_addr: str | None = None
+    ) -> None:
         if node.get_type() is Type.DOCKER:
             d_node = typing.cast(docker_node.DockerNode, val=node)
         else:
@@ -225,8 +235,11 @@ class DockerNetwork(Network):
                 f"the node {d_node.get_name()} doesn't have alive container. Maybe removed / not_deployer / hasn't been started"
             )
 
+        ipv4_addr_validated = None if not (self.__config.ipv4) else ipv4_addr  # type: ignore
+        ipv6_addr_validated = None if not (self.__config.ipv6) else ipv4_addr  # type: ignore
+
         try:
-            self.__network.connect(container=container_id)  # type: ignore
+            self.__network.connect(container=container_id, ipv4_address=ipv4_addr_validated, ipv6_address=ipv6_addr_validated)  # type: ignore
             self.__connected_uuids[d_node.get_id()] = True
         except docker.errors.APIError as err:
             raise docker_exceptions.ConnectToDockerNetError(
@@ -351,21 +364,30 @@ class DockerNetwork(Network):
             else:
                 try:
                     ipv4 = self.__get_node_network_ip(node=node)
-                except docker_exceptions.GetContainerIpError as err:
-                    raise common_exceptions.MakeSnapshotError(
-                        f"cannot get ipv4 address of the node {node.get_name()} in the network {self.__name}"
-                    ) from err
+                except docker_exceptions.GetContainerIpError:
+                    ipv4 = ""
 
             if not (self.__config.ipv6):  # type: ignore
                 ipv6 = ""
             else:
                 try:
                     ipv6 = self.__get_node_network_ip(node=node, ipv6=True)
-                except docker_exceptions.GetContainerIpError as err:
-                    raise common_exceptions.MakeSnapshotError(
-                        f"cannot get ipv6 address of the node {node.get_name()} in the network {self.__name}"
-                    ) from err
+                except docker_exceptions.GetContainerIpError:
+                    ipv6 = ""
 
             result[str(node_uuid)] = {"ipv4": ipv4, "ipv6": ipv6}
 
         return result
+
+    def __extract_gateway_addr(self) -> str:
+        if self.__network is None:
+            return ""
+
+        self.__network.reload()
+
+        if self.__network.attrs["IPAM"]["Config"] is None or []:
+            raise docker_exceptions.GetDockerNetIpError(
+                f"the network {self.__name} has an empty IPAM config"
+            )
+
+        return self.__network.attrs["IPAM"]["Config"][0]["Gateway"]

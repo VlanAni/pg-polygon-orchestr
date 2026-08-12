@@ -31,6 +31,8 @@ class DockerClientSession:
                 path=str(Path(__file__).parent),
                 buildargs={"OS_IMAGE": config.os},
                 tag=image_tag,
+                rm=True,
+                forcerm=True,
             )[0]
         except docker.errors.BuildError as err:
             raise docker_exceptions.ImageBuildError(

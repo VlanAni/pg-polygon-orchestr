@@ -66,5 +66,5 @@ class Deployer(ABC):
         pass
 
     @abstractmethod
-    def make_snapshot(self, snapshot_name: str = "") -> None:
+    def make_snapshot(self, snapshot_name: str = "", online: bool = False) -> None:
         pass

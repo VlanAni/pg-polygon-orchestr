@@ -21,6 +21,7 @@ class DockerNode(Node):
         config: NodeConfig,
         session: docker_session.DockerClientSession,
         shared_volume_registry: EntityRegistry,
+        id: uuid.UUID | None = None,
     ) -> None:
         self.__name = name
         self.__config = config
@@ -29,7 +30,7 @@ class DockerNode(Node):
         self.__state: EntityState = EntityState.NOT_DEPLOYED
         self.__docker_image: docker_images.Image | None = None
         self.__docker_container: docker_containers.Container | None = None
-        self.__uuid: uuid.UUID = uuid.uuid4()
+        self.__uuid: uuid.UUID = uuid.uuid4() if id is None else id
         self.__mounted_volumes: dict[uuid.UUID, MountConfig] = dict()
         self.__infrastructure_volumes: EntityRegistry = shared_volume_registry
 
@@ -238,7 +239,7 @@ class DockerNode(Node):
                 self.__docker_container.reload()
 
                 if self.__docker_container.status == "running":
-                    raise docker_exceptions.DockerContStartError(
+                    raise docker_exceptions.ContainerAlreadyRunning(
                         f"the node {self.__name} already running with its container"
                     )
 
@@ -254,7 +255,7 @@ class DockerNode(Node):
                 self.__docker_container.reload()
 
                 if self.__docker_container.status != "running":
-                    raise docker_exceptions.DockerContStopError(
+                    raise docker_exceptions.ContainerAlreadyStopped(
                         f"the node {self.__name} is already stopped"
                     )
 
@@ -264,7 +265,7 @@ class DockerNode(Node):
                     f"cannot stop the container {self.__docker_container.name}: {err}"
                 ) from err
         else:
-            raise docker_exceptions.DockerContStopError(
+            raise docker_exceptions.ContainerDoesNotExist(
                 f"cannot stop the not exist container"
             )
 
@@ -328,6 +329,29 @@ class DockerNode(Node):
 
         self.__docker_container.reload()
         return self.__docker_container.id
+
+    def docker_commit(self, pause: bool = True) -> docker_images.Image:
+        if self.__is_state_as_required(required=EntityState.REMOVED):
+            raise common_exceptions.EntityIsRemovedException(
+                f"the node {self.__name} is removed"
+            )
+
+        if self.__is_state_as_required(required=EntityState.NOT_DEPLOYED):
+            raise common_exceptions.EntityIsNotDeployed(
+                f"the node {self.__name} is not deployed"
+            )
+
+        if self.__docker_container is None:
+            raise docker_exceptions.ContainerDoesNotExist(
+                f"the node {self.__name} does not have its container to commit"
+            )
+
+        try:
+            return self.__docker_container.commit(tag=f"image_{self.__name}_commited", pause=pause)  # type: ignore
+        except docker.errors.APIError as err:
+            raise docker_exceptions.FailedToCommit(
+                f"failed to commit the container {self.__name}"
+            ) from err
 
     # ------ приватные проверки
 

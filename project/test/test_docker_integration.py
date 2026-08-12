@@ -6,6 +6,8 @@ import docker
 import pytest
 import os
 import pathlib
+import tarfile
+import uuid
 
 from pg_polygon_orchestr import NodeConfig
 from pg_polygon_orchestr import NetConfig
@@ -656,7 +658,7 @@ class TestDockerDeployerIntegration:
 
     # ----- ТЕСТЫ ДЛЯ СНЭПШОТОВ
 
-    def test_11_test_making_snapshot(self, deployer: DockerDeployer):
+    def test_11_snapshot_archive_exists(self, deployer: DockerDeployer):
         node_config = NodeConfig(os="alpine", cpu_limit=1, mem_limit="256m")
 
         net_config = NetConfig(internal=False)
@@ -697,7 +699,7 @@ class TestDockerDeployerIntegration:
 
         os.remove(path=os.path.join(snapshot_dir, f"{str(deployer.get_id())}.tar.gz"))
 
-        deployer.make_snapshot(snapshot_name="my_test_snapshot")
+        deployer.make_snapshot(snapshot_name="my_test_snapshot", online=True)
 
         assert not os.path.exists(
             os.path.join(snapshot_dir, f"{str(deployer.get_id())}.tar.gz")
@@ -706,6 +708,56 @@ class TestDockerDeployerIntegration:
         assert os.path.exists(os.path.join(snapshot_dir, "my_test_snapshot.tar.gz"))
 
         os.remove(path=os.path.join(snapshot_dir, "my_test_snapshot.tar.gz"))
+
+    def test_12_check_snapshot_archive_internals(self, deployer: DockerDeployer):
+        node_config = NodeConfig(os="alpine", cpu_limit=1, mem_limit="256m")
+        net_config = NetConfig(internal=False)
+        volume_config = VolumeConfig(docker_volume_driver="local")
+
+        snapshot_dir = os.path.join(
+            pathlib.Path.home(), ".pg-polygon-orchestr", "snapshots"
+        )
+
+        node_a = deployer.put_node_config("node_a", config=node_config)
+        node_b = deployer.put_node_config("node_b", config=node_config)
+        node_c = deployer.put_node_config("node_c", config=node_config)
+        net = deployer.put_network_config("net", config=net_config)
+        vol = deployer.put_volume_config("vol", config=volume_config)
+
+        a_id = node_a.get_id()
+        b_id = node_b.get_id()
+        c_id = node_c.get_id()
+        net_id = net.get_id()
+        vol_id = vol.get_id()
+
+        deployer.deploy_infrastructure()
+
+        for n in [node_a, node_b, node_c]:
+            n.start()
+
+        net.connect_node(node=node_a)
+        net.connect_node(node=node_c)
+
+        deployer.make_snapshot(snapshot_name="test_snapshot", online=True)
+
+        tar_file_path = os.path.join(snapshot_dir, "test_snapshot.tar.gz")
+
+        with tarfile.open(tar_file_path, "r:gz") as tar:
+            names = tar.getnames()
+
+            assert "meta.json" in names
+
+            assert self.__check_node_data_in_snapshot_names(uuid=a_id, names=names)
+            assert self.__check_node_data_in_snapshot_names(uuid=b_id, names=names)
+            assert self.__check_node_data_in_snapshot_names(uuid=c_id, names=names)
+
+            assert f"volumes/{str(vol_id)}.json" in names
+
+            assert f"networks/{str(net_id)}.json" in names
+
+            assert len(names) == 9
+
+        os.remove(tar_file_path)
 
     # ----- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
 
@@ -720,4 +772,11 @@ class TestDockerDeployerIntegration:
 
         return (exec_result.exit_code == expected and equal) or (
             exec_result.exit_code != expected and (not equal)
+        )
+
+    def __check_node_data_in_snapshot_names(
+        self, uuid: uuid.UUID, names: list[str], check_fs_archive: bool = True
+    ):
+        return f"nodes/{str(uuid)}.json" in names and (
+            (f"nodes/{str(uuid)}.tar" in names) if check_fs_archive else True
         )

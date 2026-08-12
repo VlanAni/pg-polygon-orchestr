@@ -17,13 +17,14 @@ class DockerVolume(Volume):
         name: str,
         config: VolumeConfig,
         session: docker_session.DockerClientSession,
+        id: uuid.UUID | None = None,
     ) -> None:
         self.__name = name
         self.__config = config
         self.__state = EntityState.NOT_DEPLOYED
         self.__shared_docker_session = session
         self.__volume = None
-        self.__uuid: uuid.UUID = uuid.uuid4()
+        self.__uuid: uuid.UUID = uuid.uuid4() if id is None else id
 
     # ------ интерфейсные методы
 

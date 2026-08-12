@@ -57,14 +57,42 @@ class MakeSnapshotHelper:
 
         tarInfo.size = len(json_dump)
 
-        self.__tar_obj.addfile(
-            tarinfo=tarInfo, fileobj=io.BytesIO(initial_bytes=json_dump)
-        )
+        try:
+            self.__tar_obj.addfile(
+                tarinfo=tarInfo, fileobj=io.BytesIO(initial_bytes=json_dump)
+            )
+        except Exception as err:
+            raise common_exceptions.MakeSnapshotError(
+                f"failed to put .json into .tar archive"
+            ) from err
 
-    def get(self) -> MakeSnapshotHelper:
-        return self
+    def get_snapshot_dir_path(self) -> str:
+        return self.__snapshots_dir
 
-    def delete_in_bad_case(self) -> None:
+    def put_tar_file_into_snapshot(self, tag: str, path: str, size: int) -> None:
+        if self.__tar_obj is None:
+            raise common_exceptions.MakeSnapshotError(f"the snapshoter is not opened")
+
+        try:
+            f = open(path, "rb")
+        except OSError as err:
+            raise common_exceptions.MakeSnapshotError(
+                f"failed to open tar file for reading"
+            ) from err
+
+        info = tarfile.TarInfo(name=tag)
+        info.size = size
+
+        try:
+            self.__tar_obj.addfile(tarinfo=info, fileobj=f)
+        except Exception as err:
+            raise common_exceptions.MakeSnapshotError(
+                f"failed to put .tar into .tar archive"
+            ) from err
+        finally:
+            f.close()
+
+    def destroy_tar(self) -> None:
         if self.__tar_obj is not None:
             self.__tar_obj.close()
 

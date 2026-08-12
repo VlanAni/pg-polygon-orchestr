@@ -11,7 +11,9 @@ class Network(Entity):
         pass
 
     @abstractmethod
-    def connect_node(self, node: Node) -> None:
+    def connect_node(
+        self, node: Node, ipv4_addr: str | None = None, ipv6_addr: str | None = None
+    ) -> None:
         pass
 
     @abstractmethod
