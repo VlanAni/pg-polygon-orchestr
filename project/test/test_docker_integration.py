@@ -77,8 +77,8 @@ class TestDockerDeployerIntegration:
         client = docker.from_env()
         try:
             expected_names = {
-                node_a.get_name(),
-                node_b.get_name(),
+                node_a.get_provider_path(),
+                node_b.get_provider_path(),
             }
 
             containers = client.containers.list(all=True)
@@ -104,8 +104,8 @@ class TestDockerDeployerIntegration:
 
         # имеющиеся контейнеры
         expected_container_names = {
-            node_a.get_name(),
-            node_b.get_name(),
+            node_a.get_provider_path(),
+            node_b.get_provider_path(),
         }
         containers = client.containers.list(all=True)
         our_containers = [c for c in containers if c.name in expected_container_names]
@@ -146,10 +146,10 @@ class TestDockerDeployerIntegration:
         client = docker.from_env()
         try:
             expected_names = {
-                node_a.get_name(),
-                node_b.get_name(),
-                node_c.get_name(),
-                node_d.get_name(),
+                node_a.get_provider_path(),
+                node_b.get_provider_path(),
+                node_c.get_provider_path(),
+                node_d.get_provider_path(),
             }
 
             containers = client.containers.list(all=True)
@@ -176,10 +176,10 @@ class TestDockerDeployerIntegration:
         # получаем имеющиеся контейнеры
         client = docker.from_env()
         expected_container_names = {
-            node_a.get_name(),
-            node_b.get_name(),
-            node_c.get_name(),
-            node_d.get_name(),
+            node_a.get_provider_path(),
+            node_b.get_provider_path(),
+            node_c.get_provider_path(),
+            node_d.get_provider_path(),
         }
         containers = client.containers.list(all=True)
         our_containers = [c for c in containers if c.name in expected_container_names]
@@ -213,7 +213,7 @@ class TestDockerDeployerIntegration:
 
             checker = docker.from_env()
 
-            container = checker.containers.get(container_id="node")
+            container = checker.containers.get(container_id=node.get_provider_path())
 
             host_config = container.attrs["HostConfig"]
 
@@ -337,12 +337,12 @@ class TestDockerDeployerIntegration:
 
         # проверяем что A видит B
 
-        a_ping_b_result = a.exec("ping -c 1 node_b")
+        a_ping_b_result = a.exec(f"ping -c 1 {b.get_provider_path()}")
         assert self.__check_exit_code(a_ping_b_result, 0, True)
 
         # проверяем что B видит A
 
-        b_ping_a_result = b.exec("ping -c 1 node_a")
+        b_ping_a_result = b.exec(f"ping -c 1 {a.get_provider_path()}")
         assert self.__check_exit_code(b_ping_a_result, 0, True)
 
         # проверяем что контейнеры не могут обращаться к внешним ресурсам (internal сеть)
@@ -388,12 +388,12 @@ class TestDockerDeployerIntegration:
         net.connect_node(node=c)
 
         # пингуемся
-        a_ping_b = a.exec("ping -c 1 node_b")
-        a_ping_c = a.exec("ping -c 1 node_c")
-        b_ping_a = b.exec("ping -c 1 node_a")
-        b_ping_c = b.exec("ping -c 1 node_c")
-        c_ping_a = c.exec("ping -c 1 node_a")
-        c_ping_b = c.exec("ping -c 1 node_b")
+        a_ping_b = a.exec(f"ping -c 1 {b.get_provider_path()}")
+        a_ping_c = a.exec(f"ping -c 1 {c.get_provider_path()}")
+        b_ping_a = b.exec(f"ping -c 1 {a.get_provider_path()}")
+        b_ping_c = b.exec(f"ping -c 1 {c.get_provider_path()}")
+        c_ping_a = c.exec(f"ping -c 1 {a.get_provider_path()}")
+        c_ping_b = c.exec(f"ping -c 1 {b.get_provider_path()}")
 
         # пропинговалися, проверяемся
         assert self.__check_exit_code(a_ping_b, 0, True)
@@ -502,7 +502,7 @@ class TestDockerDeployerIntegration:
         deployer.deploy_infrastructure()
 
         mnt_config = MountConfig(
-            volume_host_path=volume.get_name(),
+            volume_host_path=volume.get_provider_path(),
             mount_path="/app/mounted_data",
             read_only=False,
         )
@@ -523,7 +523,7 @@ class TestDockerDeployerIntegration:
 
         deployer.clear_infrastructure()
 
-    def test_9_read_only_volume(self, deployer: DockerDeployer):
+    def test_9__read_only_volume(self, deployer: DockerDeployer):
         node_config = NodeConfig(cpu_limit=1, mem_limit="512m", os="ubuntu:latest")
 
         node = deployer.put_node_config(name="node", config=node_config)
@@ -535,7 +535,7 @@ class TestDockerDeployerIntegration:
         deployer.deploy_infrastructure()
 
         mnt_config = MountConfig(
-            volume_host_path=volume.get_name(),
+            volume_host_path=volume.get_provider_path(),
             mount_path="/app/mounted_data",
             read_only=True,
         )
@@ -621,14 +621,14 @@ class TestDockerDeployerIntegration:
 
             assert self.__check_exit_code(net_1_route, 0, True)
 
-        a_ping_b = a.exec(f"ping -c 1 {b.get_name()}")
-        b_ping_a = b.exec(f"ping -c 1 {a.get_name()}")
+        a_ping_b = a.exec(f"ping -c 1 {b.get_provider_path()}")
+        b_ping_a = b.exec(f"ping -c 1 {a.get_provider_path()}")
 
         assert self.__check_exit_code(a_ping_b, 0, True)
         assert self.__check_exit_code(b_ping_a, 0, True)
 
-        c_ping_d = c.exec(f"ping -c 1 {d.get_name()}")
-        d_ping_c = d.exec(f"ping -c 1 {c.get_name()}")
+        c_ping_d = c.exec(f"ping -c 1 {d.get_provider_path()}")
+        d_ping_c = d.exec(f"ping -c 1 {c.get_provider_path()}")
 
         assert self.__check_exit_code(c_ping_d, 0, True)
         assert self.__check_exit_code(d_ping_c, 0, True)
@@ -676,7 +676,7 @@ class TestDockerDeployerIntegration:
         node.start(
             [
                 MountConfig(
-                    volume_host_path=vol.get_name(),
+                    volume_host_path=vol.get_provider_path(),
                     mount_path="/app/data",
                     read_only=False,
                 )

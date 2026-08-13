@@ -3,14 +3,13 @@ import typing
 import uuid
 import concurrent.futures as pool
 import os
-import docker.errors as dockerapi_errors
 
 from ..exception import docker_exceptions
 from ..exception import common_exceptions
 from ..configs import NodeConfig, VolumeConfig, NetConfig
 from ..abstract import Deployer, Node, Network, Volume, EntityRegistry
 from ..meta import Type
-from ..snapshot import MakeSnapshotHelper
+from ..make_snapshot_tools import SnapshotArchiveBuilder
 from .image_tar import save_image
 
 
@@ -124,7 +123,7 @@ class DockerDeployer(Deployer):
         online: bool = False,
         timeout_to_stop: int | None = None,
     ) -> None:
-        with MakeSnapshotHelper(
+        with SnapshotArchiveBuilder(
             archive_name=snapshot_name if snapshot_name else self.__uuid
         ) as s:
 
@@ -203,7 +202,7 @@ class DockerDeployer(Deployer):
                 d_node = typing.cast(docker_node.DockerNode, node)
 
                 try:
-                    image = d_node.docker_commit(pause=True)
+                    image, image_full_tag = d_node.docker_commit(pause=True)
                 except common_exceptions.EntityIsRemovedException:
                     self.__docker_nodes.pop_object_from_registry(
                         deployer=self, entity=node
@@ -252,8 +251,8 @@ class DockerDeployer(Deployer):
                     ) from err
 
                 try:
-                    image.remove()
-                except dockerapi_errors.APIError as err:
+                    self.__docker_session.ask_to_delete_image(image=image_full_tag)
+                except docker_exceptions.FailedToDeleteAnImage as err:
                     s.destroy_tar()
                     os.remove(itd.get_path())
                     try:

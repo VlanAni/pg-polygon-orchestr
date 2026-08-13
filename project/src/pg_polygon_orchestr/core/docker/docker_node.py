@@ -33,10 +33,11 @@ class DockerNode(Node):
         self.__uuid: uuid.UUID = uuid.uuid4() if id is None else id
         self.__mounted_volumes: dict[uuid.UUID, MountConfig] = dict()
         self.__infrastructure_volumes: EntityRegistry = shared_volume_registry
+        self.__provider_name = str(self.__uuid)
 
     # ----- Интерфейсные методы
 
-    def deploy(self) -> None:
+    def deploy(self, **options: str) -> None:
         if self.__is_state_as_required(required=EntityState.REMOVED):
             raise common_exceptions.EntityIsRemovedException(
                 f"the node {self.__name} is removed"
@@ -144,10 +145,13 @@ class DockerNode(Node):
             "config": self.__config,
         }
 
+    def get_provider_path(self) -> str:
+        return self.__provider_name
+
     # ------ приватные коллбеки
 
     def __deploy(self) -> None:
-        image_tag = f"image_node_{self.__name}:v0"
+        image_tag = f"{str(self.__uuid)}:v0"
         self.__image_name = image_tag
         try:
             image = self.__shared_client_session.ask_to_build_image(  # type: ignore
@@ -186,7 +190,9 @@ class DockerNode(Node):
             try:
                 if self.__docker_container is not None:
                     self.__docker_container.remove(force=True)
-                self.__shared_client_session.ask_to_delete_image(image=self.__image_name, force=True)  # type: ignore
+                self.__shared_client_session.ask_to_delete_image(
+                    image=self.__image_name
+                )
             except docker.errors.APIError as err:
                 raise docker_exceptions.DockerClearError(
                     f"failed to force remove node's {self.__name} container"
@@ -207,8 +213,15 @@ class DockerNode(Node):
         if self.__docker_container is None:
             try:
                 for mnt_cfg in mount_configs:
-                    search_result = self.__infrastructure_volumes.get_entity_by_name(
-                        name=mnt_cfg.volume_host_path
+                    try:
+                        volume_id = uuid.UUID(mnt_cfg.volume_host_path)
+                    except Exception:
+                        raise docker_exceptions.DockerContStartError(
+                            f"the volume {mnt_cfg.volume_host_path} is not known"
+                        )
+
+                    search_result = self.__infrastructure_volumes.get_entity_by_id(
+                        uuid=volume_id
                     )
                     if search_result is None:
                         self.__mounted_volumes.clear()
@@ -222,7 +235,7 @@ class DockerNode(Node):
                 container = self.__shared_client_session.ask_to_create_a_container(  # type: ignore
                     image=self.__docker_image,  # type: ignore
                     config=self.__config,  # type: ignore
-                    name=self.__name,
+                    name=str(self.__uuid),
                     mount_configs=mount_configs,
                 )
 
@@ -330,7 +343,7 @@ class DockerNode(Node):
         self.__docker_container.reload()
         return self.__docker_container.id
 
-    def docker_commit(self, pause: bool = True) -> docker_images.Image:
+    def docker_commit(self, pause: bool = True) -> tuple[docker_images.Image, str]:
         if self.__is_state_as_required(required=EntityState.REMOVED):
             raise common_exceptions.EntityIsRemovedException(
                 f"the node {self.__name} is removed"
@@ -347,7 +360,14 @@ class DockerNode(Node):
             )
 
         try:
-            return self.__docker_container.commit(tag=f"image_{self.__name}_commited", pause=pause)  # type: ignore
+            snapshot_repo = f"snapshot_{str(self.__uuid)}"
+            snapshot_tag = "v0"
+            return (
+                self.__docker_container.commit(  # type: ignore
+                    repository=snapshot_repo, tag=snapshot_tag, pause=pause
+                ),
+                f"{snapshot_repo}:{snapshot_tag}",
+            )
         except docker.errors.APIError as err:
             raise docker_exceptions.FailedToCommit(
                 f"failed to commit the container {self.__name}"

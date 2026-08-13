@@ -27,6 +27,7 @@ class DockerNetwork(Network):
         self.__uuid: uuid.UUID = uuid.uuid4() if id is None else id
         self.__infrastructure_nodes: EntityRegistry = shared_node_registry
         self.__connected_uuids: dict[uuid.UUID, bool] = dict()
+        self.__provider_name = str(self.__uuid)
 
     # ------ интерфейсные методы
 
@@ -39,7 +40,7 @@ class DockerNetwork(Network):
     def get_id(self) -> uuid.UUID:
         return self.__uuid
 
-    def deploy(self) -> None:
+    def deploy(self, **options: str) -> None:
         if self.__is_state_as_required(required=EntityState.REMOVED):
             raise common_exceptions.EntityIsRemovedException(
                 f"the network {self.__name} is removed"
@@ -50,7 +51,7 @@ class DockerNetwork(Network):
                 f"the network {self.__name} is already deployed"
             )
 
-        self.__deploy()
+        self.__deploy(options=options)
 
     def clear(self) -> None:
         if self.__is_state_as_required(required=EntityState.REMOVED):
@@ -73,7 +74,7 @@ class DockerNetwork(Network):
 
         self.__remove()
 
-    def get_network_ip(self) -> str:
+    def get_network_ip(self, ipv6: bool = False) -> str:
         if self.__is_state_as_required(required=EntityState.REMOVED):
             raise common_exceptions.EntityIsRemovedException(
                 f"the network {self.__name} is removed"
@@ -91,7 +92,17 @@ class DockerNetwork(Network):
                 f"the network {self.__name} has an empty IPAM config"
             )
 
-        return self.__network.attrs["IPAM"]["Config"][0]["Subnet"]  # type: ignore
+        for ipam_config in self.__network.attrs["IPAM"]["Config"]:  # type: ignore
+            ip_addr = ipam_config["Subnet"]
+
+            if ":" in ip_addr and ipv6:
+                return ip_addr
+            elif "." in ip_addr and not (ipv6):
+                return ip_addr
+
+        raise docker_exceptions.GetDockerNetIpError(
+            f"failed to find ip-address in the network {self.__name}"
+        )
 
     def connect_node(
         self, node: Node, ipv4_addr: str | None = None, ipv6_addr: str | None = None
@@ -164,11 +175,27 @@ class DockerNetwork(Network):
                 f"cannot serialize the network {self.__name}"
             ) from err
 
+    def get_provider_path(self) -> str:
+        return self.__provider_name
+
     # ------ приватные коллбэки
 
-    def __deploy(self) -> None:
+    def __deploy(self, options: dict[str, str]) -> None:
+        subnet_ip = options.get("ip", "")
+        static_gateway_ip = options.get("gateway", "")
+
+        if bool(subnet_ip) != bool(static_gateway_ip):
+            raise docker_exceptions.DockerDeployError(
+                f"if you want to deploy a network with static ip, you must pass its ip and its gateway ip"
+            )
+
         try:
-            network = self.__shared_docker_session.ask_to_create_network(name=self.__name, config=self.__config)  # type: ignore
+            network = self.__shared_docker_session.ask_to_create_network(
+                name=str(self.__uuid),
+                config=self.__config,  # type: ignore
+                ip=subnet_ip if subnet_ip else None,
+                gateway_ip=static_gateway_ip if static_gateway_ip else None,
+            )
         except docker_exceptions.ResourceCreationError as err:
             raise docker_exceptions.DockerDeployError(
                 f"failed to create a docker network {self.__name}"
@@ -220,7 +247,7 @@ class DockerNetwork(Network):
 
         if self.__infrastructure_nodes.get_entity_by_id(uuid=d_node.get_id()) is None:
             raise docker_exceptions.ConnectToDockerNetError(
-                f"the node {d_node.get_name()} with id {d_node.get_id} is not known"
+                f"the node {d_node.get_name()} with id {d_node.get_id()} is not known"
             )
 
         if self.__connected_uuids.get(d_node.get_id(), None) is not None:
@@ -236,7 +263,7 @@ class DockerNetwork(Network):
             )
 
         ipv4_addr_validated = None if not (self.__config.ipv4) else ipv4_addr  # type: ignore
-        ipv6_addr_validated = None if not (self.__config.ipv6) else ipv4_addr  # type: ignore
+        ipv6_addr_validated = None if not (self.__config.ipv6) else ipv6_addr  # type: ignore
 
         try:
             self.__network.connect(container=container_id, ipv4_address=ipv4_addr_validated, ipv6_address=ipv6_addr_validated)  # type: ignore

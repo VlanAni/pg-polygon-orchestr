@@ -25,6 +25,7 @@ class DockerVolume(Volume):
         self.__shared_docker_session = session
         self.__volume = None
         self.__uuid: uuid.UUID = uuid.uuid4() if id is None else id
+        self.__provider_name = str(self.__uuid)
 
     # ------ интерфейсные методы
 
@@ -34,7 +35,7 @@ class DockerVolume(Volume):
     def get_type(self) -> Type:
         return Type.DOCKER
 
-    def deploy(self) -> None:
+    def deploy(self, **options: str) -> None:
         if self.__is_state_as_required(required=EntityState.REMOVED):
             raise common_exceptions.EntityIsRemovedException(
                 f"the volume {self.__name} is removed"
@@ -80,12 +81,15 @@ class DockerVolume(Volume):
             "config": self.__config,
         }
 
+    def get_provider_path(self) -> str:
+        return self.__provider_name
+
     # ------ приватные коллбеки
 
     def __deploy(self) -> None:
         try:
             volume = self.__shared_docker_session.ask_to_create_volume(  # type: ignore
-                volume_name=self.__name, volume_config=self.__config  # type: ignore
+                volume_name=str(self.__uuid), volume_config=self.__config  # type: ignore
             )
         except docker_exceptions.ResourceCreationError as err:
             raise docker_exceptions.DockerDeployError(

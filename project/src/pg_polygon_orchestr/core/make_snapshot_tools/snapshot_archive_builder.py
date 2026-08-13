@@ -10,7 +10,7 @@ from ..exception import common_exceptions
 from ..json import CustomEncoder
 
 
-class MakeSnapshotHelper:
+class SnapshotArchiveBuilder:
 
     __snapshots_dir = os.path.join(
         pathlib.Path.home(), ".pg-polygon-orchestr", "snapshots"
@@ -21,7 +21,7 @@ class MakeSnapshotHelper:
         self.__tar_obj: tarfile.TarFile | None = None
         self.__path = self.__snapshot_full_path(archive_name=archive_name)
 
-    def __enter__(self) -> MakeSnapshotHelper:
+    def __enter__(self) -> SnapshotArchiveBuilder:
         os.makedirs(name=self.__snapshots_dir, exist_ok=True)
 
         self.__tar_obj = tarfile.open(name=self.__path, mode="w:gz")

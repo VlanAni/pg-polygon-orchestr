@@ -8,7 +8,7 @@ from ..meta import Type
 class Entity(ABC):
 
     @abstractmethod
-    def deploy(self):
+    def deploy(self, **options: str):
         pass
 
     @abstractmethod
@@ -29,6 +29,10 @@ class Entity(ABC):
 
     @abstractmethod
     def get_id(self) -> UUID:
+        pass
+
+    @abstractmethod
+    def get_provider_path(self) -> str:
         pass
 
     @abstractmethod
