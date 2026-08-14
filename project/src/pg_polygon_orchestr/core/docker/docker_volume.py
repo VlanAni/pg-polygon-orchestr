@@ -1,9 +1,12 @@
-from ..interfaces import Volume
+from typing import Any, Mapping
+
+from ..abstract import Volume
 from ..configs.volume_config import VolumeConfig
 from ..exception import docker_exceptions, common_exceptions
 from . import docker_session
 
 import docker.errors as dockerapi_errors
+import uuid
 
 from ..meta import EntityState, Type
 
@@ -14,12 +17,15 @@ class DockerVolume(Volume):
         name: str,
         config: VolumeConfig,
         session: docker_session.DockerClientSession,
+        id: uuid.UUID | None = None,
     ) -> None:
         self.__name = name
         self.__config = config
         self.__state = EntityState.NOT_DEPLOYED
         self.__shared_docker_session = session
         self.__volume = None
+        self.__uuid: uuid.UUID = uuid.uuid4() if id is None else id
+        self.__provider_name = str(self.__uuid)
 
     # ------ интерфейсные методы
 
@@ -29,7 +35,7 @@ class DockerVolume(Volume):
     def get_type(self) -> Type:
         return Type.DOCKER
 
-    def deploy(self) -> None:
+    def deploy(self, **options: str) -> None:
         if self.__is_state_as_required(required=EntityState.REMOVED):
             raise common_exceptions.EntityIsRemovedException(
                 f"the volume {self.__name} is removed"
@@ -63,12 +69,30 @@ class DockerVolume(Volume):
 
         self.__remove()
 
+    def get_id(self) -> uuid.UUID:
+        return self.__uuid
+
+    def transform_to_mapping(self) -> Mapping[str, Any]:
+        return {
+            "type": Type.DOCKER,
+            "uuid": self.__uuid,
+            "name": self.__name,
+            "state": self.__state,
+            "config": self.__config,
+        }
+
+    def get_provider_path(self) -> str:
+        return self.__provider_name
+
+    def state(self) -> EntityState:
+        return self.__state
+
     # ------ приватные коллбеки
 
     def __deploy(self) -> None:
         try:
             volume = self.__shared_docker_session.ask_to_create_volume(  # type: ignore
-                volume_name=self.__name, volume_config=self.__config  # type: ignore
+                volume_name=str(self.__uuid), volume_config=self.__config  # type: ignore
             )
         except docker_exceptions.ResourceCreationError as err:
             raise docker_exceptions.DockerDeployError(

@@ -70,6 +70,10 @@ class BuildFromStepsError(Exception):
     pass
 
 
+class TryToSerializeRemovedEntity(Exception):
+    pass
+
+
 # ------ STATE CHECK ERRORS
 
 
@@ -82,4 +86,15 @@ class EntityIsAlreadyDeployed(Exception):
 
 
 class EntityIsNotDeployed(Exception):
+    pass
+
+
+# ------ SNAPSHOTS
+
+
+class FailedToFindSnapshotTar(Exception):
+    pass
+
+
+class FailedToBuildInfrastructure(Exception):
     pass

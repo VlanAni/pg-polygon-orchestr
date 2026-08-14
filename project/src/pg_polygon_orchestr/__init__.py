@@ -2,7 +2,7 @@ from .core.configs import NetConfig, NodeConfig, VolumeConfig
 
 from .core.docker import DockerDeployer
 
-from .core.interfaces import (
+from .core.abstract import (
     Deployer,
     Node,
     Network,
@@ -12,3 +12,5 @@ from .core.interfaces import (
 from .core.exception import common_exceptions, docker_exceptions
 
 from .core.meta import MountConfig, ExecResult
+
+from .core.snapshoter import SnapshotInfraBuilder, list_snapshots, find_snap_desc

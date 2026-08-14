@@ -53,11 +53,19 @@ class UpdateContainerConfError(common_exceptions.UpdateConfError):
     pass
 
 
-class ContainerUnexpectedlyRunning(common_exceptions.StartNodeError):
+class ContainerAlreadyRunning(Exception):
     pass
 
 
-class ContainerUnexpectedlyStopped(common_exceptions.StopNodeError):
+class ContainerAlreadyStopped(Exception):
+    pass
+
+
+class ContainerDoesNotExist(Exception):
+    pass
+
+
+class FailedToCommit(Exception):
     pass
 
 
@@ -73,4 +81,47 @@ class ResourceCreationError(Exception):
 
 
 class FailedToDeleteAnImage(Exception):
+    pass
+
+
+class FailedToRestartContainersAfterFailedSnapshot(Exception):
+    pass
+
+
+class FailedToRestartContainersAfterSuccessSnapshot(Exception):
+    pass
+
+
+class FailedToSaveImageIntoTar(Exception):
+    pass
+
+
+class FailedToRestartContainers(Exception):
+    pass
+
+
+class FailedToRestartNodesAfterFailedFreezing(Exception):
+    pass
+
+
+# ------ SNAPSHOTS
+
+
+class FailedToBuildDockerInsfrastructure(Exception):
+    pass
+
+
+class FailedToBuildDockerVolume(Exception):
+    pass
+
+
+class FailedToRemoveInfrastructureAfterFailedBuild(Exception):
+    pass
+
+
+class FailedToBuildDockerNode(Exception):
+    pass
+
+
+class FailedToBuildDockerNetwork(Exception):
     pass

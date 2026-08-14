@@ -4,6 +4,7 @@ import docker.models.images as dockerapi_images
 import docker.models.networks as dockerapi_networks
 import docker.models.volumes as dockerapi_volumes
 import docker.errors
+import docker.types as dockerapi_types
 from pathlib import Path
 
 from ..configs import NodeConfig, NetConfig, VolumeConfig
@@ -31,6 +32,8 @@ class DockerClientSession:
                 path=str(Path(__file__).parent),
                 buildargs={"OS_IMAGE": config.os},
                 tag=image_tag,
+                rm=True,
+                forcerm=True,
             )[0]
         except docker.errors.BuildError as err:
             raise docker_exceptions.ImageBuildError(
@@ -140,17 +143,28 @@ class DockerClientSession:
             ) from err
 
     def ask_to_create_network(
-        self, name: str, config: NetConfig
+        self,
+        name: str,
+        config: NetConfig,
+        ip: str | None = None,
+        gateway_ip: str | None = None,
     ) -> dockerapi_networks.Network | None:
         if self.__session is None:
             self.__session = docker.from_env()
 
+        ipam_config = None
+
+        if ip and gateway_ip:
+            ipam_config = dockerapi_types.IPAMConfig(
+                pool_configs=[dockerapi_types.IPAMPool(subnet=ip, gateway=gateway_ip)]
+            )
         try:
             network = self.__session.networks.create(
                 name=name,
                 enable_ipv6=config.ipv6,
                 driver=config.docker_net_driver,
                 internal=config.internal,
+                ipam=ipam_config,
             )
         except docker.errors.APIError as err:
             raise docker_exceptions.ResourceCreationError(

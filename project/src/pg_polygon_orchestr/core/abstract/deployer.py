@@ -1,7 +1,8 @@
 # abstract class for deploying nodes using its config
 
 from abc import ABC, abstractmethod
-from collections.abc import Mapping
+from typing import Any, Mapping
+import uuid
 
 from .node import Node
 from .volume import Volume
@@ -52,4 +53,18 @@ class Deployer(ABC):
 
     @abstractmethod
     def get_network(self) -> Mapping[str, Network]:
+        pass
+
+    @abstractmethod
+    def get_id(self) -> uuid.UUID:
+        pass
+
+    # ----- SNAPSHOTS
+
+    @abstractmethod
+    def transform_to_mapping(self) -> Mapping[str, Any]:
+        pass
+
+    @abstractmethod
+    def make_snapshot(self, snapshot_name: str = "", online: bool = False) -> None:
         pass
