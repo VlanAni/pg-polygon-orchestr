@@ -19,7 +19,7 @@ class ImageTarDescriptor:
 
 
 def save_image(
-    image: dockerapi_images.Image, dir: str, tar_name: str
+    image: dockerapi_images.Image, dir: str, tar_name: str, tag: str
 ) -> ImageTarDescriptor:
     path = os.path.join(dir, f"{tar_name}.tar")
 
@@ -31,7 +31,7 @@ def save_image(
         ) from err
 
     try:
-        for chunk in image.save():
+        for chunk in image.save(named=tag):
             byte_chunk = typing.cast(bytes, chunk)
             byte_nums = len(byte_chunk)
             wrote = 0

@@ -2,8 +2,8 @@ from typing import Any, Mapping
 
 import docker
 import docker.errors
-import docker.models.images as docker_images
-import docker.models.containers as docker_containers
+import docker.models.images as dockerapi_images
+import docker.models.containers as dockerapi_containers
 import time
 import uuid
 
@@ -28,8 +28,8 @@ class DockerNode(Node):
         self.__shared_client_session: docker_session.DockerClientSession = session
         self.__image_name: str = ""
         self.__state: EntityState = EntityState.NOT_DEPLOYED
-        self.__docker_image: docker_images.Image | None = None
-        self.__docker_container: docker_containers.Container | None = None
+        self.__docker_image: dockerapi_images.Image | None = None
+        self.__docker_container: dockerapi_containers.Container | None = None
         self.__uuid: uuid.UUID = uuid.uuid4() if id is None else id
         self.__mounted_volumes: dict[uuid.UUID, MountConfig] = dict()
         self.__infrastructure_volumes: EntityRegistry = shared_volume_registry
@@ -148,9 +148,16 @@ class DockerNode(Node):
     def get_provider_path(self) -> str:
         return self.__provider_name
 
+    def state(self) -> EntityState:
+        return self.__state
+
     # ------ приватные коллбеки
 
     def __deploy(self) -> None:
+        if self.__docker_image and self.__image_name:
+            self.__state = EntityState.DEPLOYED
+            return
+
         image_tag = f"{str(self.__uuid)}:v0"
         self.__image_name = image_tag
         try:
@@ -343,7 +350,7 @@ class DockerNode(Node):
         self.__docker_container.reload()
         return self.__docker_container.id
 
-    def docker_commit(self, pause: bool = True) -> tuple[docker_images.Image, str]:
+    def docker_commit(self, pause: bool = True) -> tuple[dockerapi_images.Image, str]:
         if self.__is_state_as_required(required=EntityState.REMOVED):
             raise common_exceptions.EntityIsRemovedException(
                 f"the node {self.__name} is removed"
@@ -372,6 +379,20 @@ class DockerNode(Node):
             raise docker_exceptions.FailedToCommit(
                 f"failed to commit the container {self.__name}"
             ) from err
+
+    def push_image_to_run(self, image: dockerapi_images.Image, image_tag: str) -> None:
+        if self.__is_state_as_required(required=EntityState.REMOVED):
+            raise common_exceptions.EntityIsRemovedException(
+                f"the node {self.__name} is removed"
+            )
+
+        if self.__is_state_as_required(required=EntityState.DEPLOYED):
+            raise common_exceptions.EntityIsAlreadyDeployed(
+                f"the node {self.__name} is already deployed"
+            )
+
+        self.__docker_image = image
+        self.__image_name = image_tag
 
     # ------ приватные проверки
 

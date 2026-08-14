@@ -178,6 +178,9 @@ class DockerNetwork(Network):
     def get_provider_path(self) -> str:
         return self.__provider_name
 
+    def state(self) -> EntityState:
+        return self.__state
+
     # ------ приватные коллбэки
 
     def __deploy(self, options: dict[str, str]) -> None:
@@ -255,6 +258,11 @@ class DockerNetwork(Network):
                 f"the node {d_node.get_name()} with id {d_node.get_id()} is already connected"
             )
 
+        if node.state() != EntityState.DEPLOYED:
+            raise docker_exceptions.ConnectToDockerNetError(
+                f"the node {d_node.get_name()} with id {d_node.get_id()} is not deployed"
+            )
+
         container_id = d_node.share_container_id()
 
         if container_id is None:
@@ -291,6 +299,12 @@ class DockerNetwork(Network):
                 f"the node {d_node.get_name()} with id {d_node.get_id()} is already disconnected"
             )
 
+        if node.state() != EntityState.DEPLOYED:
+            self.__connected_uuids.pop(d_node.get_id())
+            raise docker_exceptions.DisconnectFromDockerNetError(
+                f"the node {d_node.get_name()} with id {d_node.get_id()} is not deployed"
+            )
+
         container_id = d_node.share_container_id()
 
         if container_id is None:
@@ -324,11 +338,17 @@ class DockerNetwork(Network):
                 f"the node {d_node.get_name()} with id {d_node.get_id()} is disconnected"
             )
 
+        if d_node.state() != EntityState.DEPLOYED:
+            self.__connected_uuids.pop(d_node.get_id())
+            raise docker_exceptions.GetContainerIpError(
+                f"the node {d_node.get_name()} with id {d_node.get_id()} is removed"
+            )
+
         container_id = d_node.share_container_id()
 
         if container_id is None:
             raise docker_exceptions.GetContainerIpError(
-                f"the node {d_node.get_name()} doesn't have alive container. Maybe removed / not_deployer / hasn't been started"
+                f"the node {d_node.get_name()} doesn't have alive container"
             )
 
         self.__network.reload()  # type: ignore
@@ -385,6 +405,10 @@ class DockerNetwork(Network):
         for node_uuid in self.__connected_uuids.keys():
             node = self.__infrastructure_nodes.get_entity_by_id(uuid=node_uuid)
             node = typing.cast(docker_node.DockerNode, node)
+
+            if node.state() != EntityState.DEPLOYED:
+                self.__connected_uuids.pop(node_uuid)
+                continue
 
             if not (self.__config.ipv4):  # type: ignore
                 ipv4 = ""

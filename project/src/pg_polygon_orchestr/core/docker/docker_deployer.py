@@ -233,6 +233,7 @@ class DockerDeployer(Deployer):
                         image=image,
                         dir=s.get_snapshot_dir_path(),
                         tar_name=str(node_uuid),
+                        tag=image_full_tag,
                     )
                 except docker_exceptions.FailedToSaveImageIntoTar as err:
                     s.destroy_tar()

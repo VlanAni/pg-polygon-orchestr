@@ -87,3 +87,14 @@ class EntityIsAlreadyDeployed(Exception):
 
 class EntityIsNotDeployed(Exception):
     pass
+
+
+# ------ SNAPSHOTS
+
+
+class FailedToFindSnapshotTar(Exception):
+    pass
+
+
+class FailedToBuildInfrastructure(Exception):
+    pass

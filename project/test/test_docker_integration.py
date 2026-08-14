@@ -15,6 +15,7 @@ from pg_polygon_orchestr import VolumeConfig
 from pg_polygon_orchestr import DockerDeployer
 from pg_polygon_orchestr import common_exceptions, docker_exceptions
 from pg_polygon_orchestr import ExecResult, MountConfig
+from pg_polygon_orchestr import list_snapshots, SnapshotInfraBuilder, find_snap_desc
 
 pytestmark = pytest.mark.integration
 
@@ -658,7 +659,7 @@ class TestDockerDeployerIntegration:
 
     # ----- ТЕСТЫ ДЛЯ СНЭПШОТОВ
 
-    def test_11_snapshot_archive_exists(self, deployer: DockerDeployer):
+    def test_11__snapshot_archive_exists(self, deployer: DockerDeployer):
         node_config = NodeConfig(os="alpine", cpu_limit=1, mem_limit="256m")
 
         net_config = NetConfig(internal=False)
@@ -709,7 +710,7 @@ class TestDockerDeployerIntegration:
 
         os.remove(path=os.path.join(snapshot_dir, "my_test_snapshot.tar.gz"))
 
-    def test_12_check_snapshot_archive_internals(self, deployer: DockerDeployer):
+    def test_12__check_snapshot_archive_internals(self, deployer: DockerDeployer):
         node_config = NodeConfig(os="alpine", cpu_limit=1, mem_limit="256m")
         net_config = NetConfig(internal=False)
         volume_config = VolumeConfig(docker_volume_driver="local")
@@ -758,6 +759,84 @@ class TestDockerDeployerIntegration:
             assert len(names) == 9
 
         os.remove(tar_file_path)
+
+    def test_13__build_infrastructire_from_snapshot(self, deployer: DockerDeployer):
+        node_config = NodeConfig(os="alpine", cpu_limit=1, mem_limit="256m")
+        net_config = NetConfig(internal=False)
+        volume_config = VolumeConfig(docker_volume_driver="local")
+
+        node_a = deployer.put_node_config("node_a", config=node_config)
+        node_b = deployer.put_node_config("node_b", config=node_config)
+        node_c = deployer.put_node_config("node_c", config=node_config)
+        net = deployer.put_network_config("net", config=net_config)
+        vol = deployer.put_volume_config("vol", config=volume_config)
+
+        deployer.deploy_infrastructure()
+
+        mcfg = MountConfig(
+            volume_host_path=vol.get_provider_path(),
+            mount_path="/app/data",
+            read_only=False,
+        )
+
+        for node in [node_a, node_b, node_c]:
+            node.start([mcfg])
+
+        net.connect_node(node=node_a)
+        net.connect_node(node=node_b)
+        net.connect_node(node=node_c)
+
+        for node in [node_a, node_b, node_c]:
+            pwd_res = node.exec(command="pwd")
+            assert self.__check_exit_code(exec_result=pwd_res, expected=0, equal=True)
+            pwd = pwd_res.stdout.strip()  # type: ignore
+
+            tres = node.exec(command=f"touch {pwd}/text.txt")
+            assert self.__check_exit_code(exec_result=tres, expected=0, equal=True)
+
+            echo = node.exec(
+                command=f"sh -c \"echo '{node.get_name()}' > {pwd}/text.txt\""
+            )
+            assert self.__check_exit_code(exec_result=echo, expected=0, equal=True)
+
+        deployer.make_snapshot(snapshot_name="my_snapshot", online=True)
+        deployer.remove_infrastructure()
+
+        snapshots = list_snapshots()
+        assert len(snapshots) > 0
+        assert "my_snapshot" in [sd.name for sd in snapshots]
+
+        snapshot = find_snap_desc(target="my_snapshot")
+        assert snapshot
+
+        loaded_infra = SnapshotInfraBuilder().build(snapshot_desc=snapshot)
+        assert len(loaded_infra.get_nodes().items()) == 3
+        assert len(loaded_infra.get_network().items()) == 1
+        assert len(loaded_infra.get_volumes().items()) == 1
+
+        loaded_nodes = list(loaded_infra.get_nodes().values())
+
+        for i in range(len(loaded_nodes)):
+            node = loaded_nodes[i]
+
+            pwd_res = node.exec(command="pwd")
+            assert self.__check_exit_code(exec_result=pwd_res, expected=0, equal=True)
+            pwd = pwd_res.stdout.strip()  # type: ignore
+
+            cat = node.exec(command=f"cat {pwd}/text.txt")
+            assert self.__check_exit_code(exec_result=cat, expected=0, equal=True)
+            assert f"{node.get_name()}" in cat.stdout  # type: ignore
+
+            ping_1 = node.exec(
+                command=f"ping -c 1 {loaded_nodes[(i + 1) % 3].get_provider_path()}"
+            )
+            ping_2 = node.exec(
+                command=f"ping -c 1 {loaded_nodes[(i + 2) % 3].get_provider_path()}"
+            )
+            assert self.__check_exit_code(exec_result=ping_1, expected=0, equal=True)
+            assert self.__check_exit_code(exec_result=ping_2, expected=0, equal=True)
+
+        loaded_infra.remove_infrastructure()
 
     # ----- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
 

@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 from uuid import UUID
 import typing
 
-from ..meta import Type
+from ..meta import Type, EntityState
 
 
 class Entity(ABC):
@@ -37,4 +37,8 @@ class Entity(ABC):
 
     @abstractmethod
     def transform_to_mapping(self) -> typing.Mapping[str, typing.Any]:
+        pass
+
+    @abstractmethod
+    def state(self) -> EntityState:
         pass

@@ -102,3 +102,26 @@ class FailedToRestartContainers(Exception):
 
 class FailedToRestartNodesAfterFailedFreezing(Exception):
     pass
+
+
+# ------ SNAPSHOTS
+
+
+class FailedToBuildDockerInsfrastructure(Exception):
+    pass
+
+
+class FailedToBuildDockerVolume(Exception):
+    pass
+
+
+class FailedToRemoveInfrastructureAfterFailedBuild(Exception):
+    pass
+
+
+class FailedToBuildDockerNode(Exception):
+    pass
+
+
+class FailedToBuildDockerNetwork(Exception):
+    pass

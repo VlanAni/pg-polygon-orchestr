@@ -84,6 +84,9 @@ class DockerVolume(Volume):
     def get_provider_path(self) -> str:
         return self.__provider_name
 
+    def state(self) -> EntityState:
+        return self.__state
+
     # ------ приватные коллбеки
 
     def __deploy(self) -> None:
