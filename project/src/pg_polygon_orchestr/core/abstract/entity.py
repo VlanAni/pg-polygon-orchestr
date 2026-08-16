@@ -24,7 +24,7 @@ class Entity(ABC):
         pass
 
     @abstractmethod
-    def get_name(self) -> str:
+    def inf_name(self) -> str:
         pass
 
     @abstractmethod
@@ -32,7 +32,7 @@ class Entity(ABC):
         pass
 
     @abstractmethod
-    def get_provider_path(self) -> str:
+    def real_name(self) -> str:
         pass
 
     @abstractmethod

@@ -6,12 +6,14 @@ import docker.models.images as dockerapi_images
 import docker.models.containers as dockerapi_containers
 import time
 import uuid
+import os
+import typing
 
 from ..configs import NodeConfig
 from ..exception import docker_exceptions, common_exceptions
-from ..abstract import Node, EntityRegistry
+from ..abstract import Node, EntityRegistry, Volume
 from . import docker_session
-from ..meta import MountConfig, Type, EntityState, ExecResult
+from ..meta import MountConfig, Type, EntityState, ExecResult, MountableType
 
 
 class DockerNode(Node):
@@ -23,29 +25,29 @@ class DockerNode(Node):
         shared_volume_registry: EntityRegistry,
         id: uuid.UUID | None = None,
     ) -> None:
-        self.__name = name
+        self.__inf_name = name
         self.__config = config
-        self.__shared_client_session: docker_session.DockerClientSession = session
-        self.__image_name: str = ""
+        self.__clsession: docker_session.DockerClientSession = session
+        self.__ditag: str = ""
         self.__state: EntityState = EntityState.NOT_DEPLOYED
-        self.__docker_image: dockerapi_images.Image | None = None
-        self.__docker_container: dockerapi_containers.Container | None = None
+        self.__dimg: dockerapi_images.Image | None = None
+        self.__dcont: dockerapi_containers.Container | None = None
         self.__uuid: uuid.UUID = uuid.uuid4() if id is None else id
-        self.__mounted_volumes: dict[uuid.UUID, MountConfig] = dict()
-        self.__infrastructure_volumes: EntityRegistry = shared_volume_registry
-        self.__provider_name = str(self.__uuid)
+        self.__mounted: dict[str, MountConfig] = dict()
+        self.__shrd_volumes: EntityRegistry = shared_volume_registry
+        self.__real_name = str(self.__uuid)
 
     # ----- Интерфейсные методы
 
     def deploy(self, **options: str) -> None:
         if self.__is_state_as_required(required=EntityState.REMOVED):
             raise common_exceptions.EntityIsRemovedException(
-                f"the node {self.__name} is removed"
+                f"the node {self.__inf_name} is removed"
             )
 
         if self.__is_state_as_required(required=EntityState.DEPLOYED):
             raise common_exceptions.EntityIsAlreadyDeployed(
-                f"the node {self.__name} is already deployed"
+                f"the node {self.__inf_name} is already deployed"
             )
 
         self.__deploy()
@@ -53,12 +55,12 @@ class DockerNode(Node):
     def clear(self) -> None:
         if self.__is_state_as_required(required=EntityState.REMOVED):
             raise common_exceptions.EntityIsRemovedException(
-                f"the node {self.__name} is removed"
+                f"the node {self.__inf_name} is removed"
             )
 
         if self.__is_state_as_required(required=EntityState.NOT_DEPLOYED):
             raise common_exceptions.EntityIsNotDeployed(
-                f"the node {self.__name} is not deployed"
+                f"the node {self.__inf_name} is not deployed"
             )
 
         self.__clear()
@@ -66,12 +68,12 @@ class DockerNode(Node):
     def start(self, mount_configs: list[MountConfig] = []) -> None:
         if self.__is_state_as_required(required=EntityState.REMOVED):
             raise common_exceptions.EntityIsRemovedException(
-                f"the node {self.__name} is removed"
+                f"the node {self.__inf_name} is removed"
             )
 
         if self.__is_state_as_required(required=EntityState.NOT_DEPLOYED):
             raise common_exceptions.EntityIsNotDeployed(
-                f"the node {self.__name} is not deployed"
+                f"the node {self.__inf_name} is not deployed"
             )
 
         self.__start(mount_configs=mount_configs)
@@ -79,12 +81,12 @@ class DockerNode(Node):
     def stop(self, timeout: int) -> None:
         if self.__is_state_as_required(required=EntityState.REMOVED):
             raise common_exceptions.EntityIsRemovedException(
-                f"the node {self.__name} is removed"
+                f"the node {self.__inf_name} is removed"
             )
 
         if self.__is_state_as_required(required=EntityState.NOT_DEPLOYED):
             raise common_exceptions.EntityIsNotDeployed(
-                f"the node {self.__name} is not deployed"
+                f"the node {self.__inf_name} is not deployed"
             )
 
         self.__stop(timeout=timeout)
@@ -92,12 +94,12 @@ class DockerNode(Node):
     def exec(self, command: str) -> ExecResult:
         if self.__is_state_as_required(required=EntityState.REMOVED):
             raise common_exceptions.EntityIsRemovedException(
-                f"the node {self.__name} is removed"
+                f"the node {self.__inf_name} is removed"
             )
 
         if self.__is_state_as_required(required=EntityState.NOT_DEPLOYED):
             raise common_exceptions.EntityIsNotDeployed(
-                f"the node {self.__name} is not deployed"
+                f"the node {self.__inf_name} is not deployed"
             )
 
         return self.__exec(command=command)
@@ -105,7 +107,7 @@ class DockerNode(Node):
     def update(self, new_config: NodeConfig) -> None:
         if self.__is_state_as_required(required=EntityState.REMOVED):
             raise common_exceptions.EntityIsRemovedException(
-                f"the node {self.__name} is removed"
+                f"the node {self.__inf_name} is removed"
             )
 
         self.__update(new_config=new_config)
@@ -113,7 +115,7 @@ class DockerNode(Node):
     def remove(self) -> None:
         if self.__is_state_as_required(required=EntityState.REMOVED):
             raise common_exceptions.EntityIsRemovedException(
-                f"the node {self.__name} is removed"
+                f"the node {self.__inf_name} is removed"
             )
 
         self.__remove()
@@ -121,8 +123,8 @@ class DockerNode(Node):
     def get_type(self) -> Type:
         return Type.DOCKER
 
-    def get_name(self) -> str:
-        return self.__name
+    def inf_name(self) -> str:
+        return self.__inf_name
 
     def get_id(self) -> uuid.UUID:
         return self.__uuid
@@ -130,23 +132,20 @@ class DockerNode(Node):
     def transform_to_mapping(self) -> Mapping[str, Any]:
         if self.__is_state_as_required(required=EntityState.REMOVED):
             raise common_exceptions.TryToSerializeRemovedEntity(
-                f"the node {self.__name} is removed"
+                f"the node {self.__inf_name} is removed"
             )
 
         return {
             "type": Type.DOCKER,
             "uuid": self.__uuid,
-            "name": self.__name,
+            "name": self.__inf_name,
             "state": self.__state,
-            "volumes": {
-                str(vol_id): mount_cfg
-                for vol_id, mount_cfg in self.__mounted_volumes.items()
-            },
+            "mounted": self.__filter_mounted_to_serialize(),
             "config": self.__config,
         }
 
-    def get_provider_path(self) -> str:
-        return self.__provider_name
+    def real_name(self) -> str:
+        return self.__real_name
 
     def state(self) -> EntityState:
         return self.__state
@@ -154,18 +153,18 @@ class DockerNode(Node):
     # ------ приватные коллбеки
 
     def __deploy(self) -> None:
-        if self.__docker_image and self.__image_name:
+        if self.__dimg and self.__ditag:
             self.__state = EntityState.DEPLOYED
             return
 
         image_tag = f"{str(self.__uuid)}:v0"
-        self.__image_name = image_tag
+        self.__ditag = image_tag
         try:
-            image = self.__shared_client_session.ask_to_build_image(  # type: ignore
+            image = self.__clsession.ask_to_build_image(  # type: ignore
                 config=self.__config, image_tag=image_tag  # type: ignore
             )
 
-            self.__docker_image = image
+            self.__dimg = image
             self.__state = EntityState.DEPLOYED
         except docker_exceptions.ImageBuildError as err:
             raise docker_exceptions.DockerDeployError(
@@ -174,115 +173,132 @@ class DockerNode(Node):
 
     def __clear(self) -> None:
         try:
-            if self.__docker_container is not None:
-                self.__docker_container.remove()
-            self.__shared_client_session.ask_to_delete_image(image=self.__image_name)
+            if self.__dcont is not None:
+                self.__dcont.remove()
+            self.__clsession.ask_to_delete_image(image=self.__ditag)
         except docker.errors.APIError as err:
             raise docker_exceptions.DockerClearError(
-                f"failed to remove node's {self.__name} container"
+                f"failed to remove node's {self.__inf_name} container"
             ) from err
         except docker_exceptions.FailedToDeleteAnImage as err:
             raise docker_exceptions.DockerClearError(
-                f"failed to remove node' {self.__name} image {self.__image_name}"
+                f"failed to remove node' {self.__inf_name} image {self.__ditag}"
             ) from err
 
-        self.__docker_container = None
-        self.__image_name = ""
-        self.__docker_image = None
-        self.__mounted_volumes.clear()
+        self.__dcont = None
+        self.__ditag = ""
+        self.__dimg = None
+        self.__mounted.clear()
         self.__state = EntityState.NOT_DEPLOYED
 
     def __remove(self) -> None:
         if self.__is_state_as_required(required=EntityState.DEPLOYED):
             try:
-                if self.__docker_container is not None:
-                    self.__docker_container.remove(force=True)
-                self.__shared_client_session.ask_to_delete_image(
-                    image=self.__image_name
-                )
+                if self.__dcont is not None:
+                    self.__dcont.remove(force=True)
+                self.__clsession.ask_to_delete_image(image=self.__ditag)
             except docker.errors.APIError as err:
                 raise docker_exceptions.DockerClearError(
-                    f"failed to force remove node's {self.__name} container"
+                    f"failed to force remove node's {self.__inf_name} container"
                 ) from err
             except docker_exceptions.FailedToDeleteAnImage as err:
                 raise docker_exceptions.DockerClearError(
-                    f"failed to force remove node's {self.__name} image {self.__image_name}"
+                    f"failed to force remove node's {self.__inf_name} image {self.__ditag}"
                 ) from err
 
-        self.__docker_container = None
-        self.__image_name = ""
-        self.__docker_image = None
+        self.__dcont = None
+        self.__ditag = ""
+        self.__dimg = None
         self.__config = None
-        self.__mounted_volumes.clear()
+        self.__mounted.clear()
         self.__state = EntityState.REMOVED
 
     def __start(self, mount_configs: list[MountConfig] = []) -> None:
-        if self.__docker_container is None:
+        if self.__dcont is None:
             try:
                 for mnt_cfg in mount_configs:
-                    try:
-                        volume_id = uuid.UUID(mnt_cfg.volume_host_path)
-                    except Exception:
-                        raise docker_exceptions.DockerContStartError(
-                            f"the volume {mnt_cfg.volume_host_path} is not known"
+                    mnted = mnt_cfg.mounted
+
+                    if mnted.mtype() == MountableType.HOSTPATH:
+
+                        if not os.path.exists(path=mnted.source()):
+                            self.__mounted.clear()
+                            docker_exceptions.DockerContStartError(
+                                f"the path {mnted.source()} does not exists"
+                            )
+
+                    elif mnted.mtype() == MountableType.VOLUME:
+                        mnted = typing.cast(Volume, mnted)
+
+                        if mnted.get_type() != Type.DOCKER:
+                            self.__mounted.clear()
+                            docker_exceptions.DockerContStartError(
+                                f"not a docker volume"
+                            )
+
+                        if mnted.state() != EntityState.DEPLOYED:
+                            self.__mounted.clear()
+                            docker_exceptions.DockerContStartError(
+                                f"not deployed volume"
+                            )
+
+                        search_result = self.__shrd_volumes.get_entity_by_id(
+                            uuid=mnted.get_id()
                         )
 
-                    search_result = self.__infrastructure_volumes.get_entity_by_id(
-                        uuid=volume_id
-                    )
-                    if search_result is None:
-                        self.__mounted_volumes.clear()
+                        if search_result is None:
+                            self.__mounted.clear()
+                            docker_exceptions.DockerContStartError(
+                                f"unknown docker volume"
+                            )
 
-                        raise docker_exceptions.DockerContStartError(
-                            f"the volume {mnt_cfg.volume_host_path} is not known"
-                        )
-                    else:
-                        self.__mounted_volumes[search_result.get_id()] = mnt_cfg
+                    src = mnted.source()
+                    self.__mounted[src] = mnt_cfg
 
-                container = self.__shared_client_session.ask_to_create_a_container(  # type: ignore
-                    image=self.__docker_image,  # type: ignore
+                container = self.__clsession.ask_to_create_a_container(  # type: ignore
+                    image=self.__dimg,  # type: ignore
                     config=self.__config,  # type: ignore
                     name=str(self.__uuid),
                     mount_configs=mount_configs,
                 )
 
-                self.__docker_container = container
+                self.__dcont = container
             except docker_exceptions.ResourceCreationError as err:
-                self.__mounted_volumes.clear()
+                self.__mounted.clear()
 
                 raise docker_exceptions.DockerContStartError(
-                    f"failed to create a docker container for the node {self.__name}"
+                    f"failed to create a docker container for the node {self.__inf_name}"
                 ) from err
 
         else:
             try:
-                self.__docker_container.reload()
+                self.__dcont.reload()
 
-                if self.__docker_container.status == "running":
+                if self.__dcont.status == "running":
                     raise docker_exceptions.ContainerAlreadyRunning(
-                        f"the node {self.__name} already running with its container"
+                        f"the node {self.__inf_name} already running with its container"
                     )
 
-                self.__docker_container.start()
+                self.__dcont.start()
             except docker.errors.APIError as err:
                 raise docker_exceptions.DockerContStartError(
-                    f"failed to start the container {self.__docker_container.name}: {err}"
+                    f"failed to start the container {self.__dcont.name}: {err}"
                 ) from err
 
     def __stop(self, timeout: int) -> None:
-        if self.__docker_container is not None:
+        if self.__dcont is not None:
             try:
-                self.__docker_container.reload()
+                self.__dcont.reload()
 
-                if self.__docker_container.status != "running":
+                if self.__dcont.status != "running":
                     raise docker_exceptions.ContainerAlreadyStopped(
-                        f"the node {self.__name} is already stopped"
+                        f"the node {self.__inf_name} is already stopped"
                     )
 
-                self.__docker_container.stop(timeout=timeout)
+                self.__dcont.stop(timeout=timeout)
             except docker.errors.APIError as err:
                 raise docker_exceptions.DockerContStopError(
-                    f"cannot stop the container {self.__docker_container.name}: {err}"
+                    f"cannot stop the container {self.__dcont.name}: {err}"
                 ) from err
         else:
             raise docker_exceptions.ContainerDoesNotExist(
@@ -291,20 +307,20 @@ class DockerNode(Node):
 
     def __exec(self, command: str) -> ExecResult:
         try:
-            if self.__docker_container is None:
+            if self.__dcont is None:
                 raise docker_exceptions.ExecOnContainerError(
-                    f"the container {self.__name} doesn't exist"
+                    f"the container {self.__inf_name} doesn't exist"
                 )
 
-            self.__docker_container.reload()
+            self.__dcont.reload()
 
-            if self.__docker_container.status != "running":
+            if self.__dcont.status != "running":
                 raise docker_exceptions.ExecOnContainerError(
-                    f"the node {self.__name} is stopped"
+                    f"the node {self.__inf_name} is stopped"
                 )
 
             start = time.perf_counter_ns()
-            result = self.__docker_container.exec_run(command, demux=True)
+            result = self.__dcont.exec_run(command, demux=True)
             end = time.perf_counter_ns()
 
             exit_code = result.exit_code
@@ -320,7 +336,7 @@ class DockerNode(Node):
         except docker.errors.APIError as err:
 
             raise docker_exceptions.ExecOnContainerError(
-                f"cannot execute the command {command} on the container {self.__docker_container.name}"  # type: ignore
+                f"cannot execute the command {command} on the container {self.__dcont.name}"  # type: ignore
             ) from err
 
     def __update(self, new_config: NodeConfig) -> None:
@@ -328,7 +344,7 @@ class DockerNode(Node):
             self.__config = new_config
         else:
             try:
-                self.__docker_container.update(  # type: ignore
+                self.__dcont.update(  # type: ignore
                     mem_limit=new_config.mem_limit,  # type: ignore
                     cpu_period=100000,
                     cpu_quota=new_config.cpu_limit * 100000,  # type: ignore
@@ -344,57 +360,74 @@ class DockerNode(Node):
     # ------ докер-специфичные функции (пользователю они не нужны)
 
     def share_container_id(self) -> str | None:
-        if self.__docker_container is None:
+        if self.__dcont is None:
             return None
 
-        self.__docker_container.reload()
-        return self.__docker_container.id
+        self.__dcont.reload()
+        return self.__dcont.id
 
     def docker_commit(self, pause: bool = True) -> tuple[dockerapi_images.Image, str]:
         if self.__is_state_as_required(required=EntityState.REMOVED):
             raise common_exceptions.EntityIsRemovedException(
-                f"the node {self.__name} is removed"
+                f"the node {self.__inf_name} is removed"
             )
 
         if self.__is_state_as_required(required=EntityState.NOT_DEPLOYED):
             raise common_exceptions.EntityIsNotDeployed(
-                f"the node {self.__name} is not deployed"
+                f"the node {self.__inf_name} is not deployed"
             )
 
-        if self.__docker_container is None:
+        if self.__dcont is None:
             raise docker_exceptions.ContainerDoesNotExist(
-                f"the node {self.__name} does not have its container to commit"
+                f"the node {self.__inf_name} does not have its container to commit"
             )
 
         try:
             snapshot_repo = f"snapshot_{str(self.__uuid)}"
             snapshot_tag = "v0"
             return (
-                self.__docker_container.commit(  # type: ignore
+                self.__dcont.commit(  # type: ignore
                     repository=snapshot_repo, tag=snapshot_tag, pause=pause
                 ),
                 f"{snapshot_repo}:{snapshot_tag}",
             )
         except docker.errors.APIError as err:
             raise docker_exceptions.FailedToCommit(
-                f"failed to commit the container {self.__name}"
+                f"failed to commit the container {self.__inf_name}"
             ) from err
 
     def push_image_to_run(self, image: dockerapi_images.Image, image_tag: str) -> None:
         if self.__is_state_as_required(required=EntityState.REMOVED):
             raise common_exceptions.EntityIsRemovedException(
-                f"the node {self.__name} is removed"
+                f"the node {self.__inf_name} is removed"
             )
 
         if self.__is_state_as_required(required=EntityState.DEPLOYED):
             raise common_exceptions.EntityIsAlreadyDeployed(
-                f"the node {self.__name} is already deployed"
+                f"the node {self.__inf_name} is already deployed"
             )
 
-        self.__docker_image = image
-        self.__image_name = image_tag
+        self.__dimg = image
+        self.__ditag = image_tag
 
     # ------ приватные проверки
 
     def __is_state_as_required(self, required: EntityState) -> bool:
         return self.__state is required
+
+    def __filter_mounted_to_serialize(self) -> Mapping[str, typing.Any]:
+        mounted_dump: dict[str, typing.Any] = dict()
+
+        for mnt_src, mnt_cfg in self.__mounted.items():
+            if mnt_cfg.mounted.mtype == MountableType.VOLUME:
+                vol_obj = typing.cast(Volume, mnt_cfg.mounted)
+
+                if vol_obj.state != EntityState.DEPLOYED:
+                    continue
+            elif mnt_cfg.mounted.mtype == MountableType.HOSTPATH:
+                if not os.path.exists(mnt_src):
+                    continue
+
+            mounted_dump[mnt_src] = mnt_cfg
+
+        return mounted_dump

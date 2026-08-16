@@ -8,7 +8,7 @@ import docker.types as dockerapi_types
 from pathlib import Path
 
 from ..configs import NodeConfig, NetConfig, VolumeConfig
-from ..meta import MountConfig
+from ..meta import MountConfig, MountableType
 from ..exception import docker_exceptions
 
 
@@ -74,7 +74,7 @@ class DockerClientSession:
                 sysctls=(
                     {"net.ipv4.ip_forward": "1"} if config.ip_forwarding else None
                 ),
-                volumes=self.__create_volume_mount_map(mount_configs=mount_configs),
+                mounts=self.__create_volume_mount_map(mount_configs=mount_configs),
             )
         except docker.errors.ImageNotFound as err:
             raise docker_exceptions.ResourceCreationError(
@@ -183,14 +183,25 @@ class DockerClientSession:
 
     def __create_volume_mount_map(
         self, mount_configs: list[MountConfig]
-    ) -> dict[str, dict[str, str]]:
-        mount_map: dict[str, dict[str, str]] = dict()
+    ) -> list[dockerapi_types.Mount]:
+        mount_list: list[dockerapi_types.Mount] = list()
 
-        for mount_config in mount_configs:
-            name = mount_config.volume_host_path
-            mount_path = mount_config.mount_path
-            ro = mount_config.read_only
+        for mntcfg in mount_configs:
+            source = mntcfg.mounted.source()
+            mount_path = mntcfg.mount_path
+            ro = mntcfg.read_only
 
-            mount_map[name] = {"bind": mount_path, "mode": "ro" if ro else "rw"}
+            if mntcfg.mounted.mtype() == MountableType.VOLUME:
+                mount_list.append(
+                    dockerapi_types.Mount(
+                        target=mount_path, source=source, type="volume", read_only=ro
+                    )
+                )
+            elif mntcfg.mounted.mtype() == MountableType.HOSTPATH:
+                mount_list.append(
+                    dockerapi_types.Mount(
+                        target=mount_path, source=source, type="bind", read_only=ro
+                    )
+                )
 
-        return mount_map
+        return mount_list

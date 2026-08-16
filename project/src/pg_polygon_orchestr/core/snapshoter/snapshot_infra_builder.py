@@ -5,7 +5,14 @@ import typing
 import docker
 import docker.errors
 
-from ..meta import SnapshotDescription, Type, EntityState, MountConfig
+from ..meta import (
+    SnapshotDescription,
+    Type,
+    EntityState,
+    MountConfig,
+    MountableType,
+    HostPathDesc,
+)
 from ..abstract import Deployer
 from ..exception import common_exceptions, docker_exceptions
 from ..docker import DockerDeployer, docker_node, docker_volume, docker_network
@@ -460,43 +467,58 @@ class SnapshotInfraBuilder:
 
             mount_configs: list[MountConfig] = []
 
-            if "volumes" in node_data:
-                for vol_id in node_data["volumes"].keys():
-                    volume_obj = volume_map.get(typing.cast(str, vol_id), None)
-                    if volume_obj is None:
+            if "mounted" in node_data:
+                for mnt_src in node_data["mounted"].keys():
+                    try:
+                        mtype_name = node_data["mounted"][mnt_src]["mounted"]["type"]
+                        if mtype_name == MountableType.VOLUME.name:
+                            mounted = volume_map.get(mnt_src, None)
+
+                            if mounted is None:
+                                raise docker_exceptions.FailedToBuildDockerNode(
+                                    f"cannot find a docker volume"
+                                )
+                        elif mtype_name == MountableType.HOSTPATH.name:
+                            if not os.path.exists(mnt_src):
+                                raise docker_exceptions.FailedToBuildDockerNode(
+                                    f"cannot find the path {mnt_src} on the host"
+                                )
+
+                            mounted = HostPathDesc(path=mnt_src)
+                    except Exception as err:
                         raise docker_exceptions.FailedToBuildDockerNode(
-                            f"cannot find a docker volume with id {id}"
+                            f"cannot find the path {mnt_src} on the host"
                         )
 
                     try:
                         mount_configs.append(
                             MountConfig(
-                                volume_host_path=volume_obj.get_provider_path(),
-                                mount_path=node_data["volumes"][vol_id]["mount_path"],
-                                read_only=node_data["volumes"][vol_id]["read_only"],
+                                mounted=mounted,  # type: ignore
+                                mount_path=node_data["mounted"][mnt_src]["mount_path"],
+                                read_only=node_data["mounted"][mnt_src]["read_only"],
                             )
                         )
                     except Exception as err:
                         raise docker_exceptions.FailedToBuildDockerNode(
-                            f"failed to extract mount config for the volume {vol_id}"
+                            f"failed to extract mount config for the volume {mnt_src}"
                         ) from err
             else:
                 raise docker_exceptions.FailedToBuildDockerNode(
-                    f'cannot extract "volumes" field'
+                    f'cannot extract "mounted" field'
                 )
 
             try:
                 node.deploy()
             except Exception as err:
                 raise docker_exceptions.FailedToBuildDockerNode(
-                    f"failed to deploy node {node.get_name()}"
+                    f"failed to deploy node {node.inf_name()}"
                 ) from err
 
             try:
                 node.start(mount_configs=mount_configs)
             except Exception as err:
                 raise docker_exceptions.FailedToBuildDockerNode(
-                    f"failed to start node {node.get_name()}"
+                    f"failed to start node {node.inf_name()}"
                 ) from err
 
         return node
@@ -569,7 +591,7 @@ class SnapshotInfraBuilder:
                 net.deploy(ip=subnet, gateway=gateway)
             except Exception as err:
                 raise docker_exceptions.FailedToBuildDockerNetwork(
-                    f"failed to deploy the network {net.get_name()}"
+                    f"failed to deploy the network {net.inf_name()}"
                 ) from err
 
             try:
@@ -589,5 +611,5 @@ class SnapshotInfraBuilder:
                     net.connect_node(node=node, ipv4_addr=ipv4, ipv6_addr=ipv6)
             except Exception as err:
                 raise docker_exceptions.FailedToBuildDockerNetwork(
-                    f"failed to connect nodes to the network {net.get_name()}"
+                    f"failed to connect nodes to the network {net.inf_name()}"
                 )
