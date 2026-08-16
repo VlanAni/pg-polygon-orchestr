@@ -677,7 +677,7 @@ class TestDockerDeployerIntegration:
         result = node.exec(command=f'sh -c "cat {CONTAINER_MOUNT_DIR}/{filename}"')
 
         assert self.__check_exit_code(exec_result=result, expected=0, equal=True)
-        assert content in result.stdout
+        assert content in result.stdout  # type: ignore
 
     def test_12__test_mount_single_file(
         self, deployer: DockerDeployer, host_temp_file: tuple[str, str]
@@ -700,7 +700,7 @@ class TestDockerDeployerIntegration:
         result = node.exec(f'sh -c "cat {CONTAINER_MOUNT_FILE}"')
 
         assert self.__check_exit_code(exec_result=result, expected=0, equal=True)
-        assert expected_content == result.stdout
+        assert expected_content == result.stdout  # type: ignore
 
         assert os.path.exists(host_file_path)
         with open(host_file_path, "r") as f:
@@ -727,7 +727,7 @@ class TestDockerDeployerIntegration:
 
     # ----- ТЕСТЫ ДЛЯ ЭКСПЕРИМЕНТОВ
 
-    def test___two_internal_networks_and_switch(self, deployer: DockerDeployer):
+    def test_14__two_internal_networks_and_switch(self, deployer: DockerDeployer):
         node_config = NodeConfig(
             os="alpine",
             cpu_limit=1,
@@ -834,7 +834,7 @@ class TestDockerDeployerIntegration:
 
     # ----- ТЕСТЫ ДЛЯ СНЭПШОТОВ
 
-    def test___snapshot_archive_exists(self, deployer: DockerDeployer):
+    def test_15__snapshot_archive_exists(self, deployer: DockerDeployer):
         node_config = NodeConfig(os="alpine", cpu_limit=1, mem_limit="256m")
 
         net_config = NetConfig(internal=False)
@@ -885,7 +885,7 @@ class TestDockerDeployerIntegration:
 
         os.remove(path=os.path.join(snapshot_dir, "my_test_snapshot.tar.gz"))
 
-    def test___check_snapshot_archive_internals(self, deployer: DockerDeployer):
+    def test_16__check_snapshot_archive_internals(self, deployer: DockerDeployer):
         node_config = NodeConfig(os="alpine", cpu_limit=1, mem_limit="256m")
         net_config = NetConfig(internal=False)
         volume_config = VolumeConfig(docker_volume_driver="local")
@@ -935,7 +935,7 @@ class TestDockerDeployerIntegration:
 
         os.remove(tar_file_path)
 
-    def test___build_infrastructire_from_snapshot(self, deployer: DockerDeployer):
+    def test_17__build_infrastructire_from_snapshot(self, deployer: DockerDeployer):
         node_config = NodeConfig(os="alpine", cpu_limit=1, mem_limit="256m")
         net_config = NetConfig(internal=False)
         volume_config = VolumeConfig(docker_volume_driver="local")
