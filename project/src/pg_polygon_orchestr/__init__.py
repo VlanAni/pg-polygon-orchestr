@@ -11,6 +11,6 @@ from .core.abstract import (
 
 from .core.exception import common_exceptions, docker_exceptions
 
-from .core.meta import MountConfig, ExecResult
+from .core.meta import MountConfig, ExecResult, HostPathDesc
 
 from .core.snapshoter import SnapshotInfraBuilder, list_snapshots, find_snap_desc

@@ -41,7 +41,7 @@ class DockerDeployer(Deployer):
         else:
             return typing.cast(
                 docker_node.DockerNode,
-                self.__docker_nodes.get_entity_by_name(d_node.get_name()),
+                self.__docker_nodes.get_entity_by_name(d_node.inf_name()),
             )
 
     def put_network_config(self, name: str, config: NetConfig) -> Network:
@@ -57,7 +57,7 @@ class DockerDeployer(Deployer):
         else:
             return typing.cast(
                 docker_network.DockerNetwork,
-                self.__docker_networks.get_entity_by_name(d_net.get_name()),
+                self.__docker_networks.get_entity_by_name(d_net.inf_name()),
             )
 
     def put_volume_config(self, name: str, config: VolumeConfig) -> Volume:
@@ -70,7 +70,7 @@ class DockerDeployer(Deployer):
         else:
             return typing.cast(
                 docker_volume.DockerVolume,
-                self.__docker_volumes.get_entity_by_name(d_volume.get_name()),
+                self.__docker_volumes.get_entity_by_name(d_volume.inf_name()),
             )
 
     def deploy_infrastructure(self) -> None:
@@ -145,7 +145,7 @@ class DockerDeployer(Deployer):
                     s.destroy_tar()
 
                     raise common_exceptions.MakeSnapshotError(
-                        f"failed to serialize the volume {network.get_name()} with id {str(network_uuid)}"
+                        f"failed to serialize the volume {network.inf_name()} with id {str(network_uuid)}"
                     ) from err
 
             stopped_nodes = []
@@ -186,7 +186,7 @@ class DockerDeployer(Deployer):
                         ) from err
 
                     raise common_exceptions.MakeSnapshotError(
-                        f"failed to serialize the volume {volume.get_name()} with id {str(volume_uuid)}"
+                        f"failed to serialize the volume {volume.inf_name()} with id {str(volume_uuid)}"
                     ) from err
 
             for node_uuid, node in self.__docker_nodes.get_uuid_map().items():
@@ -196,7 +196,7 @@ class DockerDeployer(Deployer):
                     s.destroy_tar()
 
                     raise common_exceptions.MakeSnapshotError(
-                        f"failed to serialize the node {node.get_name()} with id {str(node_uuid)}"
+                        f"failed to serialize the node {node.inf_name()} with id {str(node_uuid)}"
                     ) from err
 
                 d_node = typing.cast(docker_node.DockerNode, node)
@@ -225,7 +225,7 @@ class DockerDeployer(Deployer):
                         ) from err
 
                     raise common_exceptions.MakeSnapshotError(
-                        f"failed to commit the container {d_node.get_name()}"
+                        f"failed to commit the container {d_node.inf_name()}"
                     )
 
                 try:
@@ -417,11 +417,13 @@ class DockerDeployer(Deployer):
             try:
                 node.remove()
             except common_exceptions.EntityIsRemovedException:
-                self.__docker_nodes.pop_object_from_registry(deployer=self, entity=node)
+                pass
             except docker_exceptions.DockerRemoveError as err:
                 raise docker_exceptions.DockerRemoveError(
                     f"failed to remove the node {node_name}"
                 ) from err
+
+            self.__docker_nodes.pop_object_from_registry(deployer=self, entity=node)
 
     def __remove_networks(self) -> None:
         for net_name in list(self.__docker_networks.get_name_map().keys()):
@@ -431,13 +433,15 @@ class DockerDeployer(Deployer):
             try:
                 network.remove()
             except common_exceptions.EntityIsRemovedException:
-                self.__docker_networks.pop_object_from_registry(
-                    deployer=self, entity=network
-                )
+                pass
             except docker_exceptions.DockerRemoveError as err:
                 raise docker_exceptions.DockerRemoveError(
                     f"failed to remove the network {net_name}"
                 ) from err
+
+            self.__docker_networks.pop_object_from_registry(
+                deployer=self, entity=network
+            )
 
     def __remove_volumes(self) -> None:
         for volume_name in list(self.__docker_volumes.get_name_map().keys()):
@@ -447,13 +451,13 @@ class DockerDeployer(Deployer):
             try:
                 volume.remove()
             except common_exceptions.EntityIsRemovedException:
-                self.__docker_volumes.pop_object_from_registry(
-                    deployer=self, entity=volume
-                )
+                pass
             except docker_exceptions.DockerRemoveError as err:
                 raise docker_exceptions.DockerRemoveError(
                     f"failed to remove the volume {volume_name}"
                 ) from err
+
+            self.__docker_volumes.pop_object_from_registry(deployer=self, entity=volume)
 
     def __freeze_nodes_before_snapshot(
         self, stop_timeout: int
@@ -497,7 +501,7 @@ class DockerDeployer(Deployer):
                     node.start()
                 except docker_exceptions.DockerContStartError as err:
                     raise docker_exceptions.FailedToRestartNodesAfterFailedFreezing(
-                        f"failed to restart the node {node.get_name()}"
+                        f"failed to restart the node {node.inf_name()}"
                     ) from err
 
             raise common_exceptions.MakeSnapshotError(

@@ -8,6 +8,7 @@ import os
 import pathlib
 import tarfile
 import uuid
+import tempfile
 
 from pg_polygon_orchestr import NodeConfig
 from pg_polygon_orchestr import NetConfig
@@ -16,6 +17,7 @@ from pg_polygon_orchestr import DockerDeployer
 from pg_polygon_orchestr import common_exceptions, docker_exceptions
 from pg_polygon_orchestr import ExecResult, MountConfig
 from pg_polygon_orchestr import list_snapshots, SnapshotInfraBuilder, find_snap_desc
+from pg_polygon_orchestr import HostPathDesc
 
 pytestmark = pytest.mark.integration
 
@@ -35,12 +37,45 @@ skip_if_no_docker = pytest.mark.skipif(
     reason="can not access the docker daemon",
 )
 
+# ------ ФИКСТУРЫ И ДАННЫЕ
+
 
 @pytest.fixture
 def deployer():
     d = DockerDeployer()
     yield d
     d.remove_infrastructure()
+
+
+@pytest.fixture
+def host_temp_dir():
+    with tempfile.TemporaryDirectory(prefix="bind_mount_test_") as tmpdir:
+        yield tmpdir
+
+
+@pytest.fixture
+def host_temp_file():
+    fd, path = tempfile.mkstemp(prefix="bind_mount_test_", suffix=".txt")
+    initial_content = "initial content from host\n"
+    with os.fdopen(fd, "w") as f:
+        f.write(initial_content)
+    yield path, initial_content
+    if os.path.exists(path):
+        os.remove(path)
+
+
+@pytest.fixture
+def nonexistent_host_path():
+    with tempfile.TemporaryDirectory(prefix="bind_mount_test_parent_") as parent:
+        missing_path = os.path.join(parent, "this_dir_does_not_exist")
+        assert not os.path.exists(missing_path)
+        yield missing_path
+
+
+CONTAINER_MOUNT_DIR = "/mnt/test_data"
+CONTAINER_MOUNT_FILE = "/mnt/test_file.txt"
+
+# ------ ТЕСТЫ
 
 
 @skip_if_no_docker
@@ -71,6 +106,9 @@ class TestDockerDeployerIntegration:
         # деплой и запуск контейнеров
         deployer.deploy_infrastructure()
 
+        with pytest.raises(common_exceptions.EntityIsAlreadyDeployed):
+            node_a.deploy()
+
         node_a.start()
         node_b.start()
 
@@ -78,19 +116,19 @@ class TestDockerDeployerIntegration:
         client = docker.from_env()
         try:
             expected_names = {
-                node_a.get_provider_path(),
-                node_b.get_provider_path(),
+                node_a.real_name(),
+                node_b.real_name(),
             }
 
             containers = client.containers.list(all=True)
-            our_containers = [c for c in containers if c.name in expected_names]
+            infra_containers = [c for c in containers if c.name in expected_names]
 
-            assert len(our_containers) == 2, (
+            assert len(infra_containers) == 2, (
                 f"expected 2 containers, found "
-                f"{len(our_containers)}: {[c.name for c in our_containers]}"
+                f"{len(infra_containers)}: {[c.name for c in infra_containers]}"
             )
 
-            actual_names = {c.name for c in our_containers}
+            actual_names = {c.name for c in infra_containers}
             assert actual_names == expected_names
         finally:
             client.close()
@@ -105,15 +143,15 @@ class TestDockerDeployerIntegration:
 
         # имеющиеся контейнеры
         expected_container_names = {
-            node_a.get_provider_path(),
-            node_b.get_provider_path(),
+            node_a.real_name(),
+            node_b.real_name(),
         }
         containers = client.containers.list(all=True)
-        our_containers = [c for c in containers if c.name in expected_container_names]
+        infra_containers = [c for c in containers if c.name in expected_container_names]
 
         client.close()
 
-    def test_2__infrastructure_four_nodes_start_stop_destroy(
+    def test_2__four_nodes_with_different_configs_start_stop_destroy(
         self, deployer: DockerDeployer
     ):
         # конфиг для первых двух нод
@@ -138,184 +176,187 @@ class TestDockerDeployerIntegration:
 
         deployer.deploy_infrastructure()
 
-        node_a.start()
-        node_b.start()
-        node_c.start()
-        node_d.start()
+        for node in [node_a, node_b, node_c, node_d]:
+            node.start()
 
         # проверка что инфраструктура запустилась и все контейнеры работают
         client = docker.from_env()
         try:
             expected_names = {
-                node_a.get_provider_path(),
-                node_b.get_provider_path(),
-                node_c.get_provider_path(),
-                node_d.get_provider_path(),
+                node_a.real_name(),
+                node_b.real_name(),
+                node_c.real_name(),
+                node_d.real_name(),
             }
 
             containers = client.containers.list(all=True)
-            our_containers = [c for c in containers if c.name in expected_names]
+            infra_containers = [c for c in containers if c.name in expected_names]
 
-            assert len(our_containers) == 4, (
+            assert len(infra_containers) == 4, (
                 f"expected 2 containers, found "
-                f"{len(our_containers)}: {[c.name for c in our_containers]}"
+                f"{len(infra_containers)}: {[c.name for c in infra_containers]}"
             )
 
-            actual_names = {c.name for c in our_containers}
+            actual_names = {c.name for c in infra_containers}
             assert actual_names == expected_names
         finally:
             client.close()
 
         # останавливаем работу инфраструктуры
-        node_a.stop(1)
-        node_b.stop(1)
-        node_c.stop(1)
-        node_d.stop(1)
+        for node in [node_a, node_b, node_c, node_d]:
+            node.stop(1)
 
         deployer.remove_infrastructure()
 
         # получаем имеющиеся контейнеры
         client = docker.from_env()
+
         expected_container_names = {
-            node_a.get_provider_path(),
-            node_b.get_provider_path(),
-            node_c.get_provider_path(),
-            node_d.get_provider_path(),
+            node_a.real_name(),
+            node_b.real_name(),
+            node_c.real_name(),
+            node_d.real_name(),
         }
+
         containers = client.containers.list(all=True)
-        our_containers = [c for c in containers if c.name in expected_container_names]
+        infra_containers = [c for c in containers if c.name in expected_container_names]
         client.close()
 
     def test_3__node_update_configuration(self, deployer: DockerDeployer):
+        # изначальный конфиг ноды
+        config = NodeConfig(
+            cpu_limit=1,
+            mem_limit="256m",
+            os="alpine",
+        )
+
+        # корректный конфиг для обновления
+        new_config = NodeConfig(
+            cpu_limit=2,
+            mem_limit="512m",
+            os="debian",
+        )
+
+        node = deployer.put_node_config(name="node", config=config)
+        assert node
+
+        deployer.deploy_infrastructure()
+
+        node.start()
+
+        # проверка, что обновление конфигурации произошло штатно
+        node.update(new_config)
+
+        checker = docker.from_env()
         try:
-            # изначальный конфиг ноды
-            config = NodeConfig(
-                cpu_limit=1,
-                mem_limit="256m",
-                os="alpine:latest",
-            )
-
-            # корректный конфиг для обновления
-            new_config = NodeConfig(
-                cpu_limit=2,
-                mem_limit="512m",
-                os="",
-            )
-
-            node = deployer.put_node_config(name="node", config=config)
-            assert node
-
-            deployer.deploy_infrastructure()
-
-            node.start()
-
-            # проверка, что обновление конфигурации произошло штатно
-            node.update(new_config)
-
-            checker = docker.from_env()
-
-            container = checker.containers.get(container_id=node.get_provider_path())
-
+            container = checker.containers.get(container_id=node.real_name())
             host_config = container.attrs["HostConfig"]
-
             cpu_period = host_config["CpuPeriod"]
             cpu_quota = host_config["CpuQuota"]
-
             assert cpu_period == 100000
             assert cpu_quota == 100000 * new_config.cpu_limit
+        finally:
+            checker.close()
 
-            node.stop(0)
-            node.clear()
+        node.stop(0)
+        node.clear()
 
+        node.update(new_config=new_config)
+
+        deployer.remove_infrastructure()
+
+        print(deployer.get_nodes())
+
+        with pytest.raises(common_exceptions.EntityIsRemovedException):
             node.update(new_config=new_config)
 
-            deployer.remove_infrastructure()
+        node = deployer.put_node_config(name="node", config=config)
+        print(node.state().name)
+        node.update(new_config=new_config)
 
-            with pytest.raises(common_exceptions.EntityIsRemovedException):
-                node.update(new_config=new_config)
+        deployer.deploy_infrastructure()
 
-            # хорошо бы найти в будущем как извлечь лимит на память и посмотреть
+        node.start()
 
+        checker = docker.from_env()
+        try:
+            container = checker.containers.get(container_id=node.real_name())
+            host_config = container.attrs["HostConfig"]
+            cpu_period = host_config["CpuPeriod"]
+            cpu_quota = host_config["CpuQuota"]
+            assert cpu_period == 100000
+            assert cpu_quota == 100000 * new_config.cpu_limit
         finally:
-            # очистка ресурсов
-            deployer.remove_infrastructure()
+            checker.close()
 
     def test_4__exec_simple_commands(self, deployer: DockerDeployer):
-        try:
-            # конфигурация для ноды
-            config = NodeConfig(
-                cpu_limit=1,
-                mem_limit="256m",
-                os="alpine:latest",
-            )
+        # конфигурация для ноды
+        config = NodeConfig(
+            cpu_limit=1,
+            mem_limit="256m",
+            os="alpine",
+        )
 
-            node = deployer.put_node_config(name="node", config=config)
+        node = deployer.put_node_config(name="node", config=config)
 
-            # деплоим ноду
-            deployer.deploy_infrastructure()
+        with pytest.raises(common_exceptions.EntityIsNotDeployed):
+            node.exec('echo "hello"')
 
-            # проверяем что не даст исполнить команду на несуществующем контейнере
-            with pytest.raises(docker_exceptions.ExecOnContainerError):
-                node.exec('echo "hello"')
+        # деплоим ноду
+        deployer.deploy_infrastructure()
 
-            node.start()
-            node.stop(1)
+        # проверяем что не даст исполнить команду на несуществующем контейнере
+        with pytest.raises(docker_exceptions.ExecOnContainerError):
+            node.exec('echo "hello"')
 
-            # на всякий случай вторая проверка, что не даст запустить на остановленном контейнере
-            with pytest.raises(docker_exceptions.ExecOnContainerError):
-                node.exec('echo "hello"')
+        node.start()
+        node.stop(1)
 
-            node.start()
+        # на всякий случай вторая проверка, что не даст запустить на остановленном контейнере
+        with pytest.raises(docker_exceptions.ExecOnContainerError):
+            node.exec('echo "hello"')
 
-            # проверка результата (должна выполниться команда)
-            result = node.exec("ls ./not_exist")
+        node.start()
 
-            assert result is not None
-            assert result.exit_code is not None and result.exit_code != 0
-            assert result.execution_time > 0
+        # проверка результата (должна выполниться команда)
+        result = node.exec("ls ./not_exist")
 
-            result = node.exec('echo "hello"')
+        assert result is not None
+        assert result.exit_code is not None and result.exit_code != 0
+        assert result.execution_time > 0
 
-            # команда выполнилась и вернула ноль как код возврата
-            assert result is not None
-            assert result.exit_code is not None and result.exit_code == 0
-            assert "hello" in result.stdout and not (result.stderr)
-            assert result.execution_time > 0
+        result = node.exec('echo "hello"')
 
-            node.stop(0)
-            deployer.clear_infrastructure()
+        # команда выполнилась и вернула ноль как код возврата
+        assert result is not None
+        assert result.exit_code is not None and result.exit_code == 0
+        assert "hello" in result.stdout and not (result.stderr)
+        assert result.execution_time > 0
 
-            with pytest.raises(common_exceptions.EntityIsNotDeployed):
-                node.exec('echo "hello"')
+        node.stop(0)
+        deployer.clear_infrastructure()
 
-            deployer.remove_infrastructure()
+        with pytest.raises(common_exceptions.EntityIsNotDeployed):
+            node.exec('echo "hello"')
 
-            with pytest.raises(common_exceptions.EntityIsRemovedException):
-                node.exec('echo "hello"')
+        deployer.remove_infrastructure()
 
-        finally:
-            deployer.remove_infrastructure()
+        with pytest.raises(common_exceptions.EntityIsRemovedException):
+            node.exec('echo "hello"')
 
     # ----- СЕТЕВЫЕ ТЕСТЫ
 
     def test_5__internal_network_with_two_containers(self, deployer: DockerDeployer):
         # конфигурируем ноды
-        node_a_conf = NodeConfig(
+        config = NodeConfig(
             cpu_limit=1,
             mem_limit="256m",
-            os="alpine:latest",
+            os="alpine",
             connect_to_docker_default=False,
         )
 
-        node_b_conf = NodeConfig(
-            cpu_limit=1,
-            mem_limit="256m",
-            os="alpine:latest",
-            connect_to_docker_default=False,
-        )
-
-        a = deployer.put_node_config(name="node_a", config=node_a_conf)
-        b = deployer.put_node_config(name="node_b", config=node_b_conf)
+        a = deployer.put_node_config(name="node_a", config=config)
+        b = deployer.put_node_config(name="node_b", config=config)
 
         assert a and b
 
@@ -328,7 +369,16 @@ class TestDockerDeployerIntegration:
 
         # деплоим инфраструктуру
 
+        with pytest.raises(common_exceptions.EntityIsNotDeployed):
+            net.connect_node(node=a)
+
         deployer.deploy_infrastructure()
+
+        with pytest.raises(common_exceptions.ConnectToNetError):
+            net.connect_node(node=a)
+
+        with pytest.raises(common_exceptions.ConnectToNetError):
+            net.connect_node(node=b)
 
         a.start()
         b.start()
@@ -338,12 +388,12 @@ class TestDockerDeployerIntegration:
 
         # проверяем что A видит B
 
-        a_ping_b_result = a.exec(f"ping -c 1 {b.get_provider_path()}")
+        a_ping_b_result = a.exec(f"ping -c 1 {b.real_name()}")
         assert self.__check_exit_code(a_ping_b_result, 0, True)
 
         # проверяем что B видит A
 
-        b_ping_a_result = b.exec(f"ping -c 1 {a.get_provider_path()}")
+        b_ping_a_result = b.exec(f"ping -c 1 {a.real_name()}")
         assert self.__check_exit_code(b_ping_a_result, 0, True)
 
         # проверяем что контейнеры не могут обращаться к внешним ресурсам (internal сеть)
@@ -354,9 +404,23 @@ class TestDockerDeployerIntegration:
         assert self.__check_exit_code(a_ping_google, 0, False)
         assert self.__check_exit_code(b_ping_google, 0, False)
 
-        # очищаем ресурсы
+        net.disconnect_node(node=a)
 
-        deployer.remove_infrastructure()
+        a_ping_b_after_disconnect = a.exec(f"ping -c 1 {b.real_name()}")
+        assert self.__check_exit_code(a_ping_b_after_disconnect, 0, False)
+
+        net.disconnect_node(node=b)
+
+        a.stop(1)
+        a.clear()
+        b.stop(1)
+        b.clear()
+
+        with pytest.raises(common_exceptions.ConnectToNetError):
+            net.connect_node(node=a)
+
+        with pytest.raises(common_exceptions.ConnectToNetError):
+            net.connect_node(node=b)
 
     def test_6__public_network_with_three_containers(self, deployer: DockerDeployer):
 
@@ -380,21 +444,21 @@ class TestDockerDeployerIntegration:
 
         # деплоим и запускаем инфраструктуру
         deployer.deploy_infrastructure()
-        a.start()
-        b.start()
-        c.start()
+
+        for node in [a, b, c]:
+            node.start()
 
         net.connect_node(node=a)
         net.connect_node(node=b)
         net.connect_node(node=c)
 
         # пингуемся
-        a_ping_b = a.exec(f"ping -c 1 {b.get_provider_path()}")
-        a_ping_c = a.exec(f"ping -c 1 {c.get_provider_path()}")
-        b_ping_a = b.exec(f"ping -c 1 {a.get_provider_path()}")
-        b_ping_c = b.exec(f"ping -c 1 {c.get_provider_path()}")
-        c_ping_a = c.exec(f"ping -c 1 {a.get_provider_path()}")
-        c_ping_b = c.exec(f"ping -c 1 {b.get_provider_path()}")
+        a_ping_b = a.exec(f"ping -c 1 {b.real_name()}")
+        a_ping_c = a.exec(f"ping -c 1 {c.real_name()}")
+        b_ping_a = b.exec(f"ping -c 1 {a.real_name()}")
+        b_ping_c = b.exec(f"ping -c 1 {c.real_name()}")
+        c_ping_a = c.exec(f"ping -c 1 {a.real_name()}")
+        c_ping_b = c.exec(f"ping -c 1 {b.real_name()}")
 
         # пропинговалися, проверяемся
         assert self.__check_exit_code(a_ping_b, 0, True)
@@ -409,8 +473,6 @@ class TestDockerDeployerIntegration:
 
         # пропинговались?
         assert self.__check_exit_code(a_ping_google, 0, True)
-
-        deployer.remove_infrastructure()
 
     def test_7__four_nodes_and_four_networks(self, deployer: DockerDeployer):
         config = NodeConfig(
@@ -487,7 +549,7 @@ class TestDockerDeployerIntegration:
 
         deployer.clear_infrastructure()
 
-    # ----- ТЕСТЫ ДЛЯ ТОМОВ
+    # ----- ТЕСТЫ ДЛЯ ТОМОВ И ДИРЕКТОРИЙ
 
     def test_8__volume_mount_persistency(self, deployer: DockerDeployer):
         node_config = NodeConfig(cpu_limit=1, mem_limit="512m", os="ubuntu:latest")
@@ -503,7 +565,7 @@ class TestDockerDeployerIntegration:
         deployer.deploy_infrastructure()
 
         mnt_config = MountConfig(
-            volume_host_path=volume.get_provider_path(),
+            mounted=volume,
             mount_path="/app/mounted_data",
             read_only=False,
         )
@@ -536,7 +598,7 @@ class TestDockerDeployerIntegration:
         deployer.deploy_infrastructure()
 
         mnt_config = MountConfig(
-            volume_host_path=volume.get_provider_path(),
+            mounted=volume,
             mount_path="/app/mounted_data",
             read_only=True,
         )
@@ -550,9 +612,122 @@ class TestDockerDeployerIntegration:
         deployer.clear_infrastructure()
         deployer.remove_infrastructure()
 
+    def test_10__mount_directory_write_from_container_visible_on_host(
+        self, deployer: DockerDeployer, host_temp_dir: str
+    ):
+        config = NodeConfig(os="alpine", cpu_limit=1, mem_limit="256m")
+
+        node = deployer.put_node_config(name="test_node", config=config)
+
+        filename = "from_container.txt"
+        content = "written inside container"
+
+        deployer.deploy_infrastructure()
+
+        node.start(
+            [
+                MountConfig(
+                    mounted=HostPathDesc(path=host_temp_dir),
+                    mount_path=CONTAINER_MOUNT_DIR,
+                    read_only=False,
+                )
+            ]
+        )
+
+        result = node.exec(
+            command=f"sh -c \"echo -n '{content}' > {CONTAINER_MOUNT_DIR}/{filename}\""
+        )
+
+        assert self.__check_exit_code(exec_result=result, expected=0, equal=True)
+
+        host_file_path = os.path.join(host_temp_dir, filename)
+        assert os.path.exists(host_file_path)
+        with open(host_file_path, "r") as f:
+            actual_content = f.read()
+        assert actual_content == content
+
+    def test_11__mount_directory_write_from_host_visible_in_container(
+        self, deployer: DockerDeployer, host_temp_dir: str
+    ):
+        filename = "from_host.txt"
+        content = "written on host before container start"
+        host_file_path = os.path.join(host_temp_dir, filename)
+
+        with open(host_file_path, "w") as f:
+            f.write(content)
+
+        assert os.path.exists(host_file_path)
+        with open(host_file_path, "r") as f:
+            assert f.read() == content
+
+        config = NodeConfig(os="alpine", cpu_limit=1, mem_limit="256m")
+
+        node = deployer.put_node_config(name="test_node", config=config)
+        node.deploy()
+        node.start(
+            [
+                MountConfig(
+                    mounted=HostPathDesc(path=host_temp_dir),
+                    mount_path=CONTAINER_MOUNT_DIR,
+                    read_only=False,
+                )
+            ]
+        )
+
+        result = node.exec(command=f'sh -c "cat {CONTAINER_MOUNT_DIR}/{filename}"')
+
+        assert self.__check_exit_code(exec_result=result, expected=0, equal=True)
+        assert content in result.stdout  # type: ignore
+
+    def test_12__test_mount_single_file(
+        self, deployer: DockerDeployer, host_temp_file: tuple[str, str]
+    ):
+        host_file_path, expected_content = host_temp_file
+
+        config = NodeConfig(os="alpine", cpu_limit=1, mem_limit="256m")
+        node = deployer.put_node_config(name="test_node", config=config)
+        node.deploy()
+        node.start(
+            [
+                MountConfig(
+                    mounted=HostPathDesc(path=host_file_path),
+                    mount_path=CONTAINER_MOUNT_FILE,
+                    read_only=False,
+                )
+            ]
+        )
+
+        result = node.exec(f'sh -c "cat {CONTAINER_MOUNT_FILE}"')
+
+        assert self.__check_exit_code(exec_result=result, expected=0, equal=True)
+        assert expected_content == result.stdout  # type: ignore
+
+        assert os.path.exists(host_file_path)
+        with open(host_file_path, "r") as f:
+            assert f.read() == expected_content
+
+    def test_13__test_mount_nonexistent_directory_raises(
+        self, deployer: DockerDeployer, nonexistent_host_path: str
+    ):
+        config = NodeConfig(os="alpine", cpu_limit=1, mem_limit="256m")
+        node = deployer.put_node_config(name="test_node", config=config)
+        node.deploy()
+        with pytest.raises(docker_exceptions.DockerContStartError):
+            node.start(
+                [
+                    MountConfig(
+                        mounted=HostPathDesc(path=nonexistent_host_path),
+                        mount_path=CONTAINER_MOUNT_DIR,
+                        read_only=False,
+                    )
+                ]
+            )
+
+        assert not os.path.exists(nonexistent_host_path)
+
     # ----- ТЕСТЫ ДЛЯ ЭКСПЕРИМЕНТОВ
 
-    def test_10__two_internal_networks_and_switch(self, deployer: DockerDeployer):
+    def test_14__two_internal_networks_and_switch(self, deployer: DockerDeployer):
         node_config = NodeConfig(
             os="alpine",
             cpu_limit=1,
@@ -622,14 +797,14 @@ class TestDockerDeployerIntegration:
 
             assert self.__check_exit_code(net_1_route, 0, True)
 
-        a_ping_b = a.exec(f"ping -c 1 {b.get_provider_path()}")
-        b_ping_a = b.exec(f"ping -c 1 {a.get_provider_path()}")
+        a_ping_b = a.exec(f"ping -c 1 {b.real_name()}")
+        b_ping_a = b.exec(f"ping -c 1 {a.real_name()}")
 
         assert self.__check_exit_code(a_ping_b, 0, True)
         assert self.__check_exit_code(b_ping_a, 0, True)
 
-        c_ping_d = c.exec(f"ping -c 1 {d.get_provider_path()}")
-        d_ping_c = d.exec(f"ping -c 1 {c.get_provider_path()}")
+        c_ping_d = c.exec(f"ping -c 1 {d.real_name()}")
+        d_ping_c = d.exec(f"ping -c 1 {c.real_name()}")
 
         assert self.__check_exit_code(c_ping_d, 0, True)
         assert self.__check_exit_code(d_ping_c, 0, True)
@@ -659,7 +834,7 @@ class TestDockerDeployerIntegration:
 
     # ----- ТЕСТЫ ДЛЯ СНЭПШОТОВ
 
-    def test_11__snapshot_archive_exists(self, deployer: DockerDeployer):
+    def test_15__snapshot_archive_exists(self, deployer: DockerDeployer):
         node_config = NodeConfig(os="alpine", cpu_limit=1, mem_limit="256m")
 
         net_config = NetConfig(internal=False)
@@ -677,7 +852,7 @@ class TestDockerDeployerIntegration:
         node.start(
             [
                 MountConfig(
-                    volume_host_path=vol.get_provider_path(),
+                    mounted=vol,
                     mount_path="/app/data",
                     read_only=False,
                 )
@@ -710,7 +885,7 @@ class TestDockerDeployerIntegration:
 
         os.remove(path=os.path.join(snapshot_dir, "my_test_snapshot.tar.gz"))
 
-    def test_12__check_snapshot_archive_internals(self, deployer: DockerDeployer):
+    def test_16__check_snapshot_archive_internals(self, deployer: DockerDeployer):
         node_config = NodeConfig(os="alpine", cpu_limit=1, mem_limit="256m")
         net_config = NetConfig(internal=False)
         volume_config = VolumeConfig(docker_volume_driver="local")
@@ -760,7 +935,7 @@ class TestDockerDeployerIntegration:
 
         os.remove(tar_file_path)
 
-    def test_13__build_infrastructire_from_snapshot(self, deployer: DockerDeployer):
+    def test_17__build_infrastructire_from_snapshot(self, deployer: DockerDeployer):
         node_config = NodeConfig(os="alpine", cpu_limit=1, mem_limit="256m")
         net_config = NetConfig(internal=False)
         volume_config = VolumeConfig(docker_volume_driver="local")
@@ -774,7 +949,7 @@ class TestDockerDeployerIntegration:
         deployer.deploy_infrastructure()
 
         mcfg = MountConfig(
-            volume_host_path=vol.get_provider_path(),
+            mounted=vol,
             mount_path="/app/data",
             read_only=False,
         )
@@ -795,7 +970,7 @@ class TestDockerDeployerIntegration:
             assert self.__check_exit_code(exec_result=tres, expected=0, equal=True)
 
             echo = node.exec(
-                command=f"sh -c \"echo '{node.get_name()}' > {pwd}/text.txt\""
+                command=f"sh -c \"echo '{node.inf_name()}' > {pwd}/text.txt\""
             )
             assert self.__check_exit_code(exec_result=echo, expected=0, equal=True)
 
@@ -825,13 +1000,13 @@ class TestDockerDeployerIntegration:
 
             cat = node.exec(command=f"cat {pwd}/text.txt")
             assert self.__check_exit_code(exec_result=cat, expected=0, equal=True)
-            assert f"{node.get_name()}" in cat.stdout  # type: ignore
+            assert f"{node.inf_name()}" in cat.stdout  # type: ignore
 
             ping_1 = node.exec(
-                command=f"ping -c 1 {loaded_nodes[(i + 1) % 3].get_provider_path()}"
+                command=f"ping -c 1 {loaded_nodes[(i + 1) % 3].real_name()}"
             )
             ping_2 = node.exec(
-                command=f"ping -c 1 {loaded_nodes[(i + 2) % 3].get_provider_path()}"
+                command=f"ping -c 1 {loaded_nodes[(i + 2) % 3].real_name()}"
             )
             assert self.__check_exit_code(exec_result=ping_1, expected=0, equal=True)
             assert self.__check_exit_code(exec_result=ping_2, expected=0, equal=True)
