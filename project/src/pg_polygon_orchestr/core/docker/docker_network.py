@@ -117,7 +117,7 @@ class DockerNetwork(Network):
                 f"the network {self.__inf_name} is not deployed"
             )
 
-        self.__connect_node(node=node)
+        self.__connect_node(node=node, ipv4_addr=ipv4_addr, ipv6_addr=ipv6_addr)
 
     def disconnect_node(self, node: Node) -> None:
         if self.__is_state_as_required(required=EntityState.REMOVED):
