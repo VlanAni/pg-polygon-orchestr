@@ -4,13 +4,13 @@ from abc import abstractmethod
 
 from ..configs import NodeConfig
 from .entity import Entity
-from ..meta import MountConfig, ExecResult
+from ..meta import ExecResult
 
 
 class Node(Entity):
 
     @abstractmethod
-    def start(self, mount_configs: list[MountConfig] = []) -> None:
+    def start(self) -> None:
         pass
 
     @abstractmethod

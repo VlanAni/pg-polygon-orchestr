@@ -508,17 +508,10 @@ class SnapshotInfraBuilder:
                 )
 
             try:
-                node.deploy()
+                node.deploy(mount_configs=mount_configs)
             except Exception as err:
                 raise docker_exceptions.FailedToBuildDockerNode(
                     f"failed to deploy node {node.inf_name()}"
-                ) from err
-
-            try:
-                node.start(mount_configs=mount_configs)
-            except Exception as err:
-                raise docker_exceptions.FailedToBuildDockerNode(
-                    f"failed to start node {node.inf_name()}"
                 ) from err
 
         return node

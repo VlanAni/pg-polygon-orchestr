@@ -265,11 +265,6 @@ class DockerNetwork(Network):
 
         container_id = d_node.share_container_id()
 
-        if container_id is None:
-            raise docker_exceptions.ConnectToDockerNetError(
-                f"the node {d_node.inf_name()} doesn't have alive container. Maybe removed / not_deployer / hasn't been started"
-            )
-
         ipv4_addr_validated = None if not (self.__config.ipv4) else ipv4_addr  # type: ignore
         ipv6_addr_validated = None if not (self.__config.ipv6) else ipv6_addr  # type: ignore
 
@@ -307,11 +302,6 @@ class DockerNetwork(Network):
 
         container_id = d_node.share_container_id()
 
-        if container_id is None:
-            raise docker_exceptions.DisconnectFromDockerNetError(
-                f"the node {d_node.inf_name()} doesn't have alive container. Maybe removed / not_deployer / hasn't been started"
-            )
-
         try:
             self.__dnet.disconnect(container=container_id)  # type: ignore
             self.__n_uuids.pop(d_node.get_id())
@@ -346,11 +336,6 @@ class DockerNetwork(Network):
 
         container_id = d_node.share_container_id()
 
-        if container_id is None:
-            raise docker_exceptions.GetContainerIpError(
-                f"the node {d_node.inf_name()} doesn't have alive container"
-            )
-
         self.__dnet.reload()  # type: ignore
 
         containers = self.__dnet.attrs.get("Containers", None)  # type: ignore
@@ -362,7 +347,7 @@ class DockerNetwork(Network):
 
         containers = typing.cast(dict[str, typing.Any], containers)
 
-        cont_data = containers.get(container_id, None)
+        cont_data = containers.get(container_id, None)  # type: ignore
 
         if cont_data is None or cont_data == {}:
             raise docker_exceptions.GetContainerIpError(

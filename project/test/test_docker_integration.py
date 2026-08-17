@@ -363,12 +363,6 @@ class TestDockerDeployerIntegration:
 
         deployer.deploy_infrastructure()
 
-        with pytest.raises(common_exceptions.ConnectToNetError):
-            net.connect_node(node=a)
-
-        with pytest.raises(common_exceptions.ConnectToNetError):
-            net.connect_node(node=b)
-
         a.start()
         b.start()
 
@@ -527,24 +521,25 @@ class TestDockerDeployerIntegration:
 
     def test_8__volume_mount_persistency(self, deployer: DockerDeployer):
         node_config = NodeConfig(cpu_limit=1, mem_limit="512m", os="ubuntu:latest")
-
         node = deployer.put_node_config(name="node", config=node_config)
 
         volume_conf = VolumeConfig(
             docker_volume_driver="local",
         )
-
         volume = deployer.put_volume_config(name="test_volume", config=volume_conf)
 
-        deployer.deploy_infrastructure()
-
-        mnt_config = MountConfig(
-            mounted=volume,
-            mount_path="/app/mounted_data",
-            read_only=False,
+        volume.deploy()
+        node.deploy(
+            mount_configs=[
+                MountConfig(
+                    mounted=volume,
+                    mount_path="/app/mounted_data",
+                    read_only=False,
+                )
+            ]
         )
 
-        node.start([mnt_config])
+        node.start()
 
         result = node.exec("sh -c 'echo test > /app/mounted_data/file.txt'")
         assert self.__check_exit_code(result, 0, True)
@@ -562,22 +557,23 @@ class TestDockerDeployerIntegration:
 
     def test_9__read_only_volume(self, deployer: DockerDeployer):
         node_config = NodeConfig(cpu_limit=1, mem_limit="512m", os="ubuntu:latest")
-
         node = deployer.put_node_config(name="node", config=node_config)
 
         volume_conf = VolumeConfig(docker_volume_driver="local")
-
         volume = deployer.put_volume_config(name="test_volume", config=volume_conf)
 
-        deployer.deploy_infrastructure()
-
-        mnt_config = MountConfig(
-            mounted=volume,
-            mount_path="/app/mounted_data",
-            read_only=True,
+        volume.deploy()
+        node.deploy(
+            mount_configs=[
+                MountConfig(
+                    mounted=volume,
+                    mount_path="/app/mounted_data",
+                    read_only=True,
+                )
+            ]
         )
 
-        node.start([mnt_config])
+        node.start()
 
         result = node.exec("sh -c 'echo test > /app/mounted_data/file.txt'")
         assert self.__check_exit_code(result, 0, False)
@@ -590,16 +586,13 @@ class TestDockerDeployerIntegration:
         self, deployer: DockerDeployer, host_temp_dir: str
     ):
         config = NodeConfig(os="alpine", cpu_limit=1, mem_limit="256m")
-
         node = deployer.put_node_config(name="test_node", config=config)
 
         filename = "from_container.txt"
         content = "written inside container"
 
-        deployer.deploy_infrastructure()
-
-        node.start(
-            [
+        node.deploy(
+            mount_configs=[
                 MountConfig(
                     mounted=HostPathDesc(path=host_temp_dir),
                     mount_path=CONTAINER_MOUNT_DIR,
@@ -607,6 +600,8 @@ class TestDockerDeployerIntegration:
                 )
             ]
         )
+
+        node.start()
 
         result = node.exec(
             command=f"sh -c \"echo -n '{content}' > {CONTAINER_MOUNT_DIR}/{filename}\""
@@ -637,9 +632,8 @@ class TestDockerDeployerIntegration:
         config = NodeConfig(os="alpine", cpu_limit=1, mem_limit="256m")
 
         node = deployer.put_node_config(name="test_node", config=config)
-        node.deploy()
-        node.start(
-            [
+        node.deploy(
+            mount_configs=[
                 MountConfig(
                     mounted=HostPathDesc(path=host_temp_dir),
                     mount_path=CONTAINER_MOUNT_DIR,
@@ -647,6 +641,8 @@ class TestDockerDeployerIntegration:
                 )
             ]
         )
+
+        node.start()
 
         result = node.exec(command=f'sh -c "cat {CONTAINER_MOUNT_DIR}/{filename}"')
 
@@ -660,9 +656,8 @@ class TestDockerDeployerIntegration:
 
         config = NodeConfig(os="alpine", cpu_limit=1, mem_limit="256m")
         node = deployer.put_node_config(name="test_node", config=config)
-        node.deploy()
-        node.start(
-            [
+        node.deploy(
+            mount_configs=[
                 MountConfig(
                     mounted=HostPathDesc(path=host_file_path),
                     mount_path=CONTAINER_MOUNT_FILE,
@@ -670,6 +665,7 @@ class TestDockerDeployerIntegration:
                 )
             ]
         )
+        node.start()
 
         result = node.exec(f'sh -c "cat {CONTAINER_MOUNT_FILE}"')
 
@@ -685,10 +681,9 @@ class TestDockerDeployerIntegration:
     ):
         config = NodeConfig(os="alpine", cpu_limit=1, mem_limit="256m")
         node = deployer.put_node_config(name="test_node", config=config)
-        node.deploy()
-        with pytest.raises(docker_exceptions.DockerContStartError):
-            node.start(
-                [
+        with pytest.raises(docker_exceptions.DockerDeployError):
+            node.deploy(
+                mount_configs=[
                     MountConfig(
                         mounted=HostPathDesc(path=nonexistent_host_path),
                         mount_path=CONTAINER_MOUNT_DIR,
@@ -819,12 +814,10 @@ class TestDockerDeployerIntegration:
         net = deployer.put_network_config("net", config=net_config)
         vol = deployer.put_volume_config("vol", config=volume_config)
 
-        node.deploy()
         net.deploy()
         vol.deploy()
-
-        node.start(
-            [
+        node.deploy(
+            mount_configs=[
                 MountConfig(
                     mounted=vol,
                     mount_path="/app/data",
@@ -832,6 +825,8 @@ class TestDockerDeployerIntegration:
                 )
             ]
         )
+
+        node.start()
 
         net.connect_node(node=node)
 
@@ -920,7 +915,8 @@ class TestDockerDeployerIntegration:
         net = deployer.put_network_config("net", config=net_config)
         vol = deployer.put_volume_config("vol", config=volume_config)
 
-        deployer.deploy_infrastructure()
+        net.deploy()
+        vol.deploy()
 
         mcfg = MountConfig(
             mounted=vol,
@@ -929,7 +925,8 @@ class TestDockerDeployerIntegration:
         )
 
         for node in [node_a, node_b, node_c]:
-            node.start([mcfg])
+            node.deploy(mount_configs=[mcfg])
+            node.start()
 
         net.connect_node(node=node_a)
         net.connect_node(node=node_b)
@@ -966,6 +963,9 @@ class TestDockerDeployerIntegration:
         loaded_nodes = list(loaded_infra.get_nodes().values())
 
         for i in range(len(loaded_nodes)):
+            loaded_nodes[i].start()
+
+        for i in range(len(loaded_nodes)):
             node = loaded_nodes[i]
 
             pwd_res = node.exec(command="pwd")
@@ -998,7 +998,7 @@ class TestDockerDeployerIntegration:
         volume_conf = VolumeConfig(docker_volume_driver="local")
         volume = deployer.put_volume_config(name="shared_volume", config=volume_conf)
 
-        deployer.deploy_infrastructure()
+        volume.deploy()
 
         mnt_config = MountConfig(
             mounted=volume,
@@ -1006,8 +1006,9 @@ class TestDockerDeployerIntegration:
             read_only=False,
         )
 
-        node_a.start([mnt_config])
-        node_b.start([mnt_config])
+        for node in [node_a, node_b]:
+            node.deploy(mount_configs=[mnt_config])
+            node.start()
 
         write_result = node_a.exec("sh -c 'echo from_node_a > /shared/shared.txt'")
         assert self.__check_exit_code(write_result, 0, True)
@@ -1045,11 +1046,10 @@ class TestDockerDeployerIntegration:
             },
         )
         volume = deployer.put_volume_config(name="tmpfs_volume", config=volume_conf)
+        volume.deploy()
 
-        deployer.deploy_infrastructure()
-
-        node.start(
-            [
+        node.deploy(
+            mount_configs=[
                 MountConfig(
                     mounted=volume,
                     mount_path="/app/tmpfs_data",
@@ -1057,6 +1057,7 @@ class TestDockerDeployerIntegration:
                 )
             ]
         )
+        node.start()
 
         small_write = node.exec(
             "sh -c 'dd if=/dev/zero of=/app/tmpfs_data/small.bin bs=1k count=100'"
@@ -1255,11 +1256,8 @@ class TestDockerDeployerIntegration:
     ):
         node_config = NodeConfig(os="alpine", cpu_limit=1, mem_limit="256m")
         node = deployer.put_node_config(name="node_a", config=node_config)
-
-        deployer.deploy_infrastructure()
-
-        node.start(
-            [
+        node.deploy(
+            mount_configs=[
                 MountConfig(
                     mounted=HostPathDesc(path=host_temp_dir),
                     mount_path=CONTAINER_MOUNT_DIR,
@@ -1267,6 +1265,7 @@ class TestDockerDeployerIntegration:
                 )
             ]
         )
+        node.start()
 
         filename = "before_snapshot.txt"
         content = "data written before making a snapshot"
@@ -1291,6 +1290,8 @@ class TestDockerDeployerIntegration:
         loaded_nodes = list(loaded_infra.get_nodes().values())
         assert len(loaded_nodes) == 1
         restored_node = loaded_nodes[0]
+
+        restored_node.start()
 
         read_result = restored_node.exec(
             command=f'sh -c "cat {CONTAINER_MOUNT_DIR}/{filename}"'
