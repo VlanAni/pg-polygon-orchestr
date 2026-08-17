@@ -7,7 +7,7 @@ from .node import Node
 class Network(Entity):
 
     @abstractmethod
-    def get_network_ip(self) -> str:
+    def get_network_ip(self, ipv6: bool = False) -> str:
         pass
 
     @abstractmethod
