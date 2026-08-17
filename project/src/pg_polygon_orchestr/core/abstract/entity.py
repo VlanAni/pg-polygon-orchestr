@@ -2,13 +2,13 @@ from abc import ABC, abstractmethod
 from uuid import UUID
 import typing
 
-from ..meta import Type, EntityState
+from ..meta import Type, EntityState, MountConfig
 
 
 class Entity(ABC):
 
     @abstractmethod
-    def deploy(self, **options: str):
+    def deploy(self, **options: str | list[MountConfig]):
         pass
 
     @abstractmethod

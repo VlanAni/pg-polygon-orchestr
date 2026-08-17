@@ -63,7 +63,7 @@ class DockerClientSession:
             self.__session = docker.from_env()
 
         try:
-            container = self.__session.containers.run(
+            container = self.__session.containers.create(
                 image=image,
                 cpu_period=100000,
                 cpu_quota=100000 * config.cpu_limit,
@@ -87,6 +87,14 @@ class DockerClientSession:
             ) from err
 
         if not (config.connect_to_docker_default):
+            try:
+                container.start()
+            except docker.errors.APIError as err:
+                container.remove(force=True)
+                raise docker_exceptions.ResourceCreationError(
+                    f"failed to start container to disconnect from default bridge"
+                ) from err
+
             if self.__default_bridge is None:
                 try:
                     networks = self.__session.networks.list(names=["bridge"])  # type: ignore
@@ -94,7 +102,7 @@ class DockerClientSession:
                     container.remove(force=True)
                     raise docker_exceptions.ResourceCreationError(
                         f"cannot get the default bridge"
-                    )
+                    ) from err
 
                 if len(networks) == 0:
                     container.remove(force=True)
@@ -110,7 +118,15 @@ class DockerClientSession:
                 container.remove(force=True)
                 raise docker_exceptions.ResourceCreationError(
                     f"failed to disconnect container from the default bridge"
-                )
+                ) from err
+
+            try:
+                container.stop(timeout=0)
+            except docker.errors.APIError as err:
+                container.remove(force=True)
+                raise docker_exceptions.ResourceCreationError(
+                    f"failed to disconnect container from the default bridge"
+                ) from err
 
         return container
 
