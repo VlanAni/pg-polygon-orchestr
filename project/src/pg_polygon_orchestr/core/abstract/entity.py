@@ -6,6 +6,7 @@ from ..meta import Type, EntityState, MountConfig
 
 
 class Entity(ABC):
+    """Базовый класс для Volume, Node и Network"""
 
     @abstractmethod
     def deploy(self, **options: str | list[MountConfig]):
