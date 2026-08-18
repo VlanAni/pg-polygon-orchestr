@@ -8,6 +8,14 @@ from .mounted import Mountable
 
 @dataclass(frozen=True)
 class MountConfig(Serializable):
+    """Конфигурация для монтирования ресурсов
+
+    `mounted`: `Mountable` - объект, который нужно смонтировать (`Volume` / `HostPathDesc`)\n
+    `mount_path`: `str` - куда монтировать сущность внутри контейнера\n
+    `read_only`: `bool` - смонтированный ресурс доступен только для чтения
+
+    """
+
     mounted: Mountable
     mount_path: str
     read_only: bool

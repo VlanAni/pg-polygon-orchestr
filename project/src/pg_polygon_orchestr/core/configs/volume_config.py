@@ -6,6 +6,15 @@ from ..serializable import Serializable
 
 @dataclass
 class VolumeConfig(Serializable):
+    """Конфиг для Volume'ов
+
+    `docker_volume_driver`: `str` - драйвер для Docker Volume'а\n
+    `path_on_host`: `str` - путь к тому на хосте (используется для виртуальных машин)\n
+    `docker_driver_options`: `dict[str, str]` - опции драйвера Docker Volume'а. Имеют такой же формат, как и в `docker-py`\n
+    Класс является **иммутабельным**
+
+    """
+
     docker_volume_driver: str
     path_on_host: str = ""
     docker_driver_opts: InitVar[dict[str, str] | None] = None  # type: ignore

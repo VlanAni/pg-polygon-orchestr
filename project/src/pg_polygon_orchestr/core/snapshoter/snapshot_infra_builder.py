@@ -20,7 +20,21 @@ from ..configs import VolumeConfig, NetConfig, NodeConfig
 
 
 class SnapshotInfraBuilder:
+    """Класс, создающий инфраструктуру из snapshot'а"""
+
     def build(self, snapshot_desc: SnapshotDescription) -> Deployer:
+        """_summary_
+
+        Args:
+            snapshot_desc (SnapshotDescription): дескриптор snapshot'а
+
+        Raises:
+            common_exceptions.FailedToFindSnapshotTar: не удаётся получить доступ к директории, содержащей архивы snapshot'ов в формате `.tar.gz`
+            common_exceptions.FailedToBuildInfrastructure: не удаётся создать инфраструктуру из snapshot'а
+
+        Returns:
+            Deployer: конкретный деплоер, реализующий интерфейс `Deployer` (тип записит от типа инфраструктуры в `meta.json`)
+        """
         sp = snapshot_desc.path
 
         if not (os.path.exists(sp)):

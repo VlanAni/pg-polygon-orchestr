@@ -6,6 +6,18 @@ from ..serializable import Serializable
 
 @dataclass(frozen=True)
 class NodeConfig(Serializable):
+    """Конфиг для узла инфраструктуры
+
+    `os`: `str` - операционная система узла (для Docker - название базового образа с ОС)\n
+    `cpu_limit`: `int` - процессорные единицы (сколько ядер может использовать узел)\n
+    `mem_limit`: `str` - лимит на память (формат `число[g/m]`)\n
+    `ip_forwarding`: `bool` = False - включение на узле пересылку ip-пакетов\n
+    `net_settings_roots`: `bool` = False - предоставить ли capabilities для сетевой настройки ноды после запуска (к примеру, таблиц маршрутизации)\n
+    `connect_to_docker_default`: `bool` = True - флаг подключения узла к дефолтной сети Docker'а\n
+    Класс **иммутабельный**
+
+    """
+
     os: str
     cpu_limit: int
     mem_limit: str

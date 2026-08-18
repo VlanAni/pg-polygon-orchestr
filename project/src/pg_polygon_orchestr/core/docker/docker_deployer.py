@@ -17,6 +17,10 @@ from . import docker_node, docker_volume, docker_network, docker_session
 
 
 class DockerDeployer(Deployer):
+    """Реализация интерфейса `Deployer` для создания инфраструктуры `Docker`\n
+    Смотри документацию `Deployer` для информации о методах
+    """
+
     def __init__(self, id: uuid.UUID | None = None) -> None:
         self.__uuid: uuid.UUID = uuid.uuid4() if id is None else id
         self.__docker_nodes: EntityRegistry = EntityRegistry()
@@ -308,6 +312,11 @@ class DockerDeployer(Deployer):
     # ------ приватные методы
 
     def __deploy_volumes(self) -> None:
+        """_summary_
+
+        Raises:
+            docker_exceptions.DockerDeployError: _description_
+        """
         for volume_name in list(self.__docker_volumes.get_name_map().keys()):
             volume = self.__docker_volumes.get_entity_by_name(name=volume_name)
             volume = typing.cast(docker_volume.DockerVolume, volume)
