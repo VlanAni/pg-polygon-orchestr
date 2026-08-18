@@ -348,7 +348,7 @@ class SnapshotInfraBuilder:
 
         volume = deployer.put_volume_config(name=name, config=vc)
 
-        if state == EntityState.DEPLOYED:
+        if state == EntityState.DEPLOYED.name:
             try:
                 volume.deploy()
             except Exception as err:
