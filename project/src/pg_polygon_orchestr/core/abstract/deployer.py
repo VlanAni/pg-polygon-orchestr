@@ -9,6 +9,7 @@ from .volume import Volume
 from .network import Network
 
 from ..configs import NetConfig, NodeConfig, VolumeConfig
+from ..meta import SnapshotDescription
 
 
 class Deployer(ABC):
@@ -66,5 +67,7 @@ class Deployer(ABC):
         pass
 
     @abstractmethod
-    def make_snapshot(self, snapshot_name: str = "", online: bool = False) -> None:
+    def make_snapshot(
+        self, snapshot_name: str = "", online: bool = False
+    ) -> SnapshotDescription:
         pass

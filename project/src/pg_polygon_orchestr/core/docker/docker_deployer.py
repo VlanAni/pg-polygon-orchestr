@@ -8,7 +8,7 @@ from ..exception import docker_exceptions
 from ..exception import common_exceptions
 from ..configs import NodeConfig, VolumeConfig, NetConfig
 from ..abstract import Deployer, Node, Network, Volume, EntityRegistry
-from ..meta import Type
+from ..meta import Type, SnapshotDescription
 from ..make_snapshot_tools import SnapshotArchiveBuilder
 from .image_tar import save_image
 
@@ -122,7 +122,7 @@ class DockerDeployer(Deployer):
         snapshot_name: str = "",
         online: bool = False,
         timeout_to_stop: int | None = None,
-    ) -> None:
+    ) -> SnapshotDescription:
         with SnapshotArchiveBuilder(
             archive_name=snapshot_name if snapshot_name else self.__uuid
         ) as s:
@@ -302,6 +302,8 @@ class DockerDeployer(Deployer):
                     raise docker_exceptions.FailedToRestartContainersAfterSuccessSnapshot(
                         f"failed to restart all stopped nodes after making snapshot"
                     ) from err
+
+        return SnapshotDescription(name=snapshot_name)
 
     # ------ приватные методы
 

@@ -18,7 +18,7 @@ from pg_polygon_orchestr import VolumeConfig
 from pg_polygon_orchestr import DockerDeployer
 from pg_polygon_orchestr import common_exceptions, docker_exceptions
 from pg_polygon_orchestr import ExecResult, MountConfig
-from pg_polygon_orchestr import list_snapshots, SnapshotInfraBuilder, find_snap_desc
+from pg_polygon_orchestr import SnapshotInfraBuilder, find_snap_desc
 from pg_polygon_orchestr import HostPathDesc
 
 pytestmark = pytest.mark.integration
@@ -44,9 +44,9 @@ skip_if_no_docker = pytest.mark.skipif(
 
 @pytest.fixture
 def deployer():
-    d = DockerDeployer()
-    yield d
-    d.remove_infrastructure()
+    deployer = DockerDeployer()
+    yield deployer
+    deployer.remove_infrastructure()
 
 
 @pytest.fixture
@@ -945,22 +945,15 @@ class TestDockerDeployerIntegration:
             )
             assert self.__check_exit_code(exec_result=echo, expected=0, equal=True)
 
-        deployer.make_snapshot(snapshot_name="my_snapshot", online=True)
+        snap_desc = deployer.make_snapshot(snapshot_name="my_snapshot", online=True)
         deployer.remove_infrastructure()
 
-        snapshots = list_snapshots()
-        assert len(snapshots) > 0
-        assert "my_snapshot" in [sd.name for sd in snapshots]
+        loaded_deployer = SnapshotInfraBuilder().build(snapshot_desc=snap_desc)
+        assert len(loaded_deployer.get_nodes().items()) == 3
+        assert len(loaded_deployer.get_network().items()) == 1
+        assert len(loaded_deployer.get_volumes().items()) == 1
 
-        snapshot = find_snap_desc(target="my_snapshot")
-        assert snapshot
-
-        loaded_infra = SnapshotInfraBuilder().build(snapshot_desc=snapshot)
-        assert len(loaded_infra.get_nodes().items()) == 3
-        assert len(loaded_infra.get_network().items()) == 1
-        assert len(loaded_infra.get_volumes().items()) == 1
-
-        loaded_nodes = list(loaded_infra.get_nodes().values())
+        loaded_nodes = list(loaded_deployer.get_nodes().values())
 
         for i in range(len(loaded_nodes)):
             loaded_nodes[i].start()
@@ -985,7 +978,7 @@ class TestDockerDeployerIntegration:
             assert self.__check_exit_code(exec_result=ping_1, expected=0, equal=True)
             assert self.__check_exit_code(exec_result=ping_2, expected=0, equal=True)
 
-        loaded_infra.remove_infrastructure()
+        loaded_deployer.remove_infrastructure()
 
     # ----- ДОПОЛНИТЕЛЬНЫЕ ТЕСТЫ ДЛЯ ТОМОВ
 
@@ -1320,6 +1313,152 @@ class TestDockerDeployerIntegration:
             pathlib.Path.home(), ".pg-polygon-orchestr", "snapshots"
         )
         tar_path = os.path.join(snapshot_dir, "host_dir_snapshot.tar.gz")
+        if os.path.exists(tar_path):
+            os.remove(tar_path)
+
+    def test_R__three_node_network_with_volumes_and_snapshot_of_dev_toolchain(
+        self, deployer: DockerDeployer
+    ):
+        light_node_config = NodeConfig(
+            cpu_limit=1, mem_limit="256m", os="alpine", connect_to_docker_default=False
+        )
+        database_config = NodeConfig(
+            cpu_limit=4,
+            mem_limit="8g",
+            os="ubuntu:latest",
+            connect_to_docker_default=False,
+        )
+        net_config = NetConfig(internal=False, ipv4=True, ipv6=False)
+
+        node_a = deployer.put_node_config(name="node_a", config=light_node_config)
+        node_b = deployer.put_node_config(name="node_b", config=light_node_config)
+        database = deployer.put_node_config(name="database", config=database_config)
+
+        net = deployer.put_network_config(name="net", config=net_config)
+
+        volume = deployer.put_volume_config(
+            name="volume_a", config=VolumeConfig(docker_volume_driver="local")
+        )
+
+        VOLUME_MOUNT_PATH = "/app/data"
+        POSTGRES_SRC_MOUNT = "/usr/src/postgres"
+
+        volume.deploy()
+        net.deploy()
+
+        node_a.deploy(
+            mount_configs=[
+                MountConfig(
+                    mounted=volume, mount_path=VOLUME_MOUNT_PATH, read_only=False
+                )
+            ]
+        )
+        node_b.deploy(
+            mount_configs=[
+                MountConfig(
+                    mounted=volume, mount_path=VOLUME_MOUNT_PATH, read_only=False
+                )
+            ]
+        )
+        database.deploy(
+            mount_configs=[
+                MountConfig(
+                    mounted=HostPathDesc(
+                        path=os.path.join(pathlib.Path.home(), "postgres")
+                    ),
+                    mount_path=POSTGRES_SRC_MOUNT,
+                    read_only=False,
+                )
+            ]
+        )
+
+        node_a.start()
+        node_b.start()
+        database.start()
+
+        net.connect_node(node=node_a)
+        net.connect_node(node=node_b)
+        net.connect_node(node=database)
+
+        database.exec(
+            command=f"sh -c 'apt-get update && apt-get install -y iputils-ping'"
+        )
+
+        a_ping_b = node_a.exec(f"ping -c 1 {node_b.real_name()}")
+        a_ping_db = node_a.exec(f"ping -c 1 {database.real_name()}")
+        b_ping_a = node_b.exec(f"ping -c 1 {node_a.real_name()}")
+        b_ping_db = node_b.exec(f"ping -c 1 {database.real_name()}")
+        db_ping_a = database.exec(f"ping -c 1 {node_a.real_name()}")
+        db_ping_b = database.exec(f"ping -c 1 {node_b.real_name()}")
+
+        assert self.__check_exit_code(a_ping_b, 0, True)
+        assert self.__check_exit_code(a_ping_db, 0, True)
+        assert self.__check_exit_code(b_ping_a, 0, True)
+        assert self.__check_exit_code(b_ping_db, 0, True)
+        assert self.__check_exit_code(db_ping_a, 0, True)
+        assert self.__check_exit_code(db_ping_b, 0, True)
+
+        write_a = node_a.exec(
+            f"sh -c 'echo node_a_data > {VOLUME_MOUNT_PATH}/marker_{node_a.inf_name()}.txt'"
+        )
+        write_b = node_b.exec(
+            f"sh -c 'echo node_b_data > {VOLUME_MOUNT_PATH}/marker_{node_b.inf_name()}.txt'"
+        )
+        assert self.__check_exit_code(write_a, 0, True)
+        assert self.__check_exit_code(write_b, 0, True)
+
+        read_a = node_a.exec(f"cat {VOLUME_MOUNT_PATH}/marker_{node_a.inf_name()}.txt")
+        read_b = node_b.exec(f"cat {VOLUME_MOUNT_PATH}/marker_{node_b.inf_name()}.txt")
+        assert self.__check_exit_code(read_a, 0, True)
+        assert self.__check_exit_code(read_b, 0, True)
+        assert "node_a_data" in read_a.stdout  # type: ignore
+        assert "node_b_data" in read_b.stdout  # type: ignore
+
+        update_result = database.exec("sh -c 'apt-get update -qq'")
+        assert self.__check_exit_code(update_result, 0, True)
+
+        toolchain_install = database.exec("sh -c 'apt-get install -y -qq git gcc'")
+        assert self.__check_exit_code(toolchain_install, 0, True)
+
+        gcc_check_before = database.exec("sh -c 'gcc --version'")
+        assert self.__check_exit_code(gcc_check_before, 0, True)
+
+        repo_check_before = database.exec(
+            f"sh -c 'test -f {POSTGRES_SRC_MOUNT}/postgresql/configure.ac'"
+        )
+        assert self.__check_exit_code(repo_check_before, 0, True)
+
+        snap_desc = deployer.make_snapshot(
+            snapshot_name="pg_dev_infra_snapshot", online=True
+        )
+        deployer.remove_infrastructure()
+
+        snapshot = find_snap_desc(target="pg_dev_infra_snapshot")
+        assert snapshot
+
+        loaded_deployer = SnapshotInfraBuilder().build(snapshot_desc=snap_desc)
+        loaded_nodes_by_name = {
+            node.inf_name(): node for node in loaded_deployer.get_nodes().values()
+        }
+        assert set(loaded_nodes_by_name.keys()) == {"node_a", "node_b", "database"}
+
+        restored_database = loaded_nodes_by_name["database"]
+        restored_database.start()
+
+        repo_check_after = restored_database.exec(
+            f"sh -c 'test -f {POSTGRES_SRC_MOUNT}/postgresql/configure.ac'"
+        )
+        assert self.__check_exit_code(repo_check_after, 0, True)
+
+        gcc_check_after = restored_database.exec("sh -c 'gcc --version'")
+        assert self.__check_exit_code(gcc_check_after, 0, True)
+
+        loaded_deployer.remove_infrastructure()
+
+        snapshot_dir = os.path.join(
+            pathlib.Path.home(), ".pg-polygon-orchestr", "snapshots"
+        )
+        tar_path = os.path.join(snapshot_dir, "pg_dev_infra_snapshot.tar.gz")
         if os.path.exists(tar_path):
             os.remove(tar_path)
 
