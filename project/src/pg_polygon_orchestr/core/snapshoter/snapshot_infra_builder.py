@@ -2,6 +2,7 @@ import tarfile
 import os
 import json
 import typing
+import inspect
 import docker
 import docker.errors
 
@@ -351,14 +352,16 @@ class SnapshotInfraBuilder:
             raise docker_exceptions.FailedToBuildDockerVolume(f"failed to get a config")
 
         try:
-            vc = VolumeConfig(
-                docker_driver_opts=config["docker_driver_opts"],
-                docker_volume_driver=config["docker_volume_driver"],
-            )
+            vc_value = {
+                field: config[field]
+                for field in inspect.signature(VolumeConfig).parameters.keys()
+            }
         except Exception as err:
             raise docker_exceptions.FailedToBuildDockerVolume(
                 f"incorrect config for the volume"
             )
+
+        vc = VolumeConfig(**vc_value)
 
         volume = deployer.put_volume_config(name=name, config=vc)
 
@@ -412,15 +415,17 @@ class SnapshotInfraBuilder:
         else:
             raise docker_exceptions.FailedToBuildDockerNode(f"failed to get a config")
 
-        nc = NodeConfig(
-            os=config["os"],
-            cpu_limit=config["cpu_limit"],
-            mem_limit=config["mem_limit"],
-            ip_forwarding=config["ip_forwarding"],
-            net_settings_roots=config["net_settings_roots"],
-            storage_limit=config["storage_limit"],
-            connect_to_docker_default=config["connect_to_docker_default"],
-        )
+        try:
+            nc_values: dict[str, typing.Any] = {
+                field: config[field]
+                for field in inspect.signature(NodeConfig).parameters.keys()
+            }
+        except Exception:
+            raise docker_exceptions.FailedToBuildDockerNode(
+                f"failed to fetch correct config"
+            )
+
+        nc = NodeConfig(**nc_values)
 
         node = deployer.put_node_config(name=name, config=nc)
         node = typing.cast(docker_node.DockerNode, node)
@@ -571,16 +576,17 @@ class SnapshotInfraBuilder:
             )
 
         try:
-            nc = NetConfig(
-                internal=config["internal"],
-                ipv4=config["ipv4"],
-                ipv6=config["ipv6"],
-                docker_net_driver=config["docker_net_driver"],
-            )
+            nc_values = {
+                field: config[field]
+                for field in inspect.signature(NetConfig).parameters.keys()
+            }
+
         except Exception as err:
             raise docker_exceptions.FailedToBuildDockerNetwork(
                 f"incorrect network config"
             ) from err
+
+        nc = NetConfig(**nc_values)
 
         net = deployer.put_network_config(name=name, config=nc)
         net = typing.cast(docker_network.DockerNetwork, net)
