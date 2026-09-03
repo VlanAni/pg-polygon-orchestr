@@ -70,11 +70,11 @@ class DockerClientSession:
                 mem_limit=config.mem_limit,
                 detach=True,
                 name=name,
-                cap_add=(["NET_ADMIN"] if config.net_settings_roots else None),
-                sysctls=(
-                    {"net.ipv4.ip_forward": "1"} if config.ip_forwarding else None
-                ),
-                mounts=self.__create_volume_mount_map(mount_configs=mount_configs),
+                cap_add=config.docker_linux_cap_add,
+                cap_drop=config.docker_linux_cap_drop,
+                mounts=self.__make_mount_list(mount_configs=mount_configs),
+                environment=config.docker_environment,
+                sysctls=self.__make_sysctls_dict(config=config),
             )
         except docker.errors.ImageNotFound as err:
             raise docker_exceptions.ResourceCreationError(
@@ -86,7 +86,7 @@ class DockerClientSession:
                 f"server returns an error"
             ) from err
 
-        if not (config.connect_to_docker_default):
+        if not (config.docker_default_bridge_connection):
             try:
                 container.start()
             except docker.errors.APIError as err:
@@ -197,7 +197,7 @@ class DockerClientSession:
 
     # ------ приватные методы
 
-    def __create_volume_mount_map(
+    def __make_mount_list(
         self, mount_configs: list[MountConfig]
     ) -> list[dockerapi_types.Mount]:
         mount_list: list[dockerapi_types.Mount] = list()
@@ -221,3 +221,12 @@ class DockerClientSession:
                 )
 
         return mount_list
+
+    def __make_sysctls_dict(self, config: NodeConfig) -> dict[str, str] | None:
+        sysctl_dict: dict[str, str] = {}
+
+        if config.docker_container_ip_forwarding:
+            sysctl_dict["net.ipv6.conf.all.forwarding"] = "1"
+            sysctl_dict["net.ipv4.ip_forward"] = "1"
+
+        return sysctl_dict if sysctl_dict else None

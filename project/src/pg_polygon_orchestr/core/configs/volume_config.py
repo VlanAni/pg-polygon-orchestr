@@ -4,41 +4,32 @@ import typing
 from ..serializable import Serializable
 
 
-@dataclass
+@dataclass()
 class VolumeConfig(Serializable):
-    """Конфиг для Volume'ов
-
-    `docker_volume_driver`: `str` - драйвер для Docker Volume'а\n
-    `path_on_host`: `str` - путь к тому на хосте (используется для виртуальных машин)\n
-    `docker_driver_options`: `dict[str, str]` - опции драйвера Docker Volume'а. Имеют такой же формат, как и в `docker-py`\n
-    Класс является **иммутабельным**
-
-    """
-
-    docker_volume_driver: str
     path_on_host: str = ""
-    docker_driver_opts: InitVar[dict[str, str] | None] = None  # type: ignore
-    _docker_driver_opts: dict[str, str] = field(init=False, repr=False)
 
-    def __post_init__(
-        self, docker_driver_opts: dict[str, str] | None  # type: ignore
-    ) -> None:
-        self._docker_driver_opts = (
-            {} if docker_driver_opts is None else docker_driver_opts.copy()
-        )
+    # параметры для докера
+    docker_volume_driver: str = "local"
+    docker_driver_opts: InitVar[dict[str, str]] = {}
+    __docker_driver_opts: dict[str, str] = field(init=False, repr=False)
+
+    def __post_init__(self, docker_driver_opts: dict[str, str]) -> None:
+        self.__docker_driver_opts = docker_driver_opts.copy()
 
     @property
     def docker_driver_options(self) -> dict[str, str]:
-        return self._docker_driver_opts.copy()
+        return self.__docker_driver_opts.copy()
 
     def serialize(self) -> typing.Mapping[str, typing.Any]:
         result: dict[str, typing.Any] = {}
 
         for f in fields(self):
-            if f.name.startswith("_"):
-                continue
-            value = getattr(self, f.name)
-            result[f.name] = value.copy() if isinstance(value, dict) else value
+            f_name = f.name
+            value = getattr(self, f_name)
 
-        result["docker_driver_opts"] = self.docker_driver_options
+            if f_name.startswith("_"):
+                f_name = f_name.split("__")[-1]
+
+            result[f_name] = value.copy() if isinstance(value, dict) else value
+
         return result

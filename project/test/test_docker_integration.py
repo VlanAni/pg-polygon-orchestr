@@ -97,7 +97,7 @@ class TestDockerDeployerIntegration:
 
     # ----- БАЗОВЫЙ ФУНКЦИОНАЛ
 
-    def test_1__two_nodes_deployed_started_named_and_destroyed(
+    def test_BASIC_1__two_nodes_deployed_started_named_and_destroyed(
         self, deployer: DockerDeployer
     ):
         config1 = NodeConfig(
@@ -159,7 +159,7 @@ class TestDockerDeployerIntegration:
 
         client.close()
 
-    def test_2__four_nodes_with_different_configs_start_stop_destroy(
+    def test_BASIC_2__four_nodes_with_different_configs_start_stop_destroy(
         self, deployer: DockerDeployer
     ):
         config1 = NodeConfig(
@@ -224,7 +224,7 @@ class TestDockerDeployerIntegration:
         infra_containers = [c for c in containers if c.name in expected_container_names]
         client.close()
 
-    def test_3__node_update_configuration(self, deployer: DockerDeployer):
+    def test_BASIC_3__node_update_configuration(self, deployer: DockerDeployer):
         config = NodeConfig(
             cpu_limit=1,
             mem_limit="256m",
@@ -288,7 +288,7 @@ class TestDockerDeployerIntegration:
         finally:
             checker.close()
 
-    def test_4__exec_simple_commands(self, deployer: DockerDeployer):
+    def test_BASIC_4__exec_simple_commands(self, deployer: DockerDeployer):
         config = NodeConfig(
             cpu_limit=1,
             mem_limit="256m",
@@ -339,12 +339,14 @@ class TestDockerDeployerIntegration:
 
     # ----- СЕТЕВЫЕ ТЕСТЫ
 
-    def test_5__internal_network_with_two_containers(self, deployer: DockerDeployer):
+    def test_NET_1__internal_network_with_two_containers(
+        self, deployer: DockerDeployer
+    ):
         config = NodeConfig(
             cpu_limit=1,
             mem_limit="256m",
             os="alpine",
-            connect_to_docker_default=False,
+            docker_default_bridge_connection=False,
         )
 
         a = deployer.put_node_config(name="node_a", config=config)
@@ -399,12 +401,14 @@ class TestDockerDeployerIntegration:
         with pytest.raises(common_exceptions.ConnectToNetError):
             net.connect_node(node=b)
 
-    def test_6__public_network_with_three_containers(self, deployer: DockerDeployer):
+    def test_NET_2__public_network_with_three_containers(
+        self, deployer: DockerDeployer
+    ):
         config = NodeConfig(
             cpu_limit=1,
             mem_limit="512m",
             os="alpine:latest",
-            connect_to_docker_default=False,
+            docker_default_bridge_connection=False,
         )
 
         a = deployer.put_node_config(name="node_a", config=config)
@@ -442,14 +446,14 @@ class TestDockerDeployerIntegration:
 
         assert self.__check_exit_code(a_ping_google, 0, True)
 
-    def test_7__four_nodes_and_four_networks(self, deployer: DockerDeployer):
+    def test_NET_3__four_nodes_and_four_networks(self, deployer: DockerDeployer):
         config = NodeConfig(
             cpu_limit=1,
             mem_limit="512m",
             os="ubuntu:latest",
-            net_settings_roots=True,
-            connect_to_docker_default=False,
-            ip_forwarding=True,
+            docker_container_ip_forwarding=True,
+            docker_linux_caps_add=["NET_ADMIN"],
+            docker_default_bridge_connection=False,
         )
 
         a = deployer.put_node_config(name="node_a", config=config)
@@ -519,7 +523,7 @@ class TestDockerDeployerIntegration:
 
     # ----- ТЕСТЫ ДЛЯ ТОМОВ И РЕСУРСОВ ХОСТА
 
-    def test_8__volume_mount_persistency(self, deployer: DockerDeployer):
+    def test_MOUNT_1__volume_mount_persistency(self, deployer: DockerDeployer):
         node_config = NodeConfig(cpu_limit=1, mem_limit="512m", os="ubuntu:latest")
         node = deployer.put_node_config(name="node", config=node_config)
 
@@ -555,7 +559,7 @@ class TestDockerDeployerIntegration:
 
         deployer.clear_infrastructure()
 
-    def test_9__read_only_volume(self, deployer: DockerDeployer):
+    def test_MOUNT_2__read_only_volume(self, deployer: DockerDeployer):
         node_config = NodeConfig(cpu_limit=1, mem_limit="512m", os="ubuntu:latest")
         node = deployer.put_node_config(name="node", config=node_config)
 
@@ -582,7 +586,7 @@ class TestDockerDeployerIntegration:
         deployer.clear_infrastructure()
         deployer.remove_infrastructure()
 
-    def test_A__mount_directory_write_from_container_visible_on_host(
+    def test_MOUNT_3__mount_directory_write_from_container_visible_on_host(
         self, deployer: DockerDeployer, host_temp_dir: str
     ):
         config = NodeConfig(os="alpine", cpu_limit=1, mem_limit="256m")
@@ -615,7 +619,7 @@ class TestDockerDeployerIntegration:
             actual_content = f.read()
         assert actual_content == content
 
-    def test_B__mount_directory_write_from_host_visible_in_container(
+    def test_MOUNT_4__mount_directory_write_from_host_visible_in_container(
         self, deployer: DockerDeployer, host_temp_dir: str
     ):
         filename = "from_host.txt"
@@ -649,7 +653,7 @@ class TestDockerDeployerIntegration:
         assert self.__check_exit_code(exec_result=result, expected=0, equal=True)
         assert content in result.stdout  # type: ignore
 
-    def test_C__mount_single_file(
+    def test_MOUNT_5__mount_single_file(
         self, deployer: DockerDeployer, host_temp_file: tuple[str, str]
     ):
         host_file_path, expected_content = host_temp_file
@@ -676,7 +680,7 @@ class TestDockerDeployerIntegration:
         with open(host_file_path, "r") as f:
             assert f.read() == expected_content
 
-    def test_D__mount_nonexistent_directory_raises(
+    def test_MOUNT_6__mount_nonexistent_directory_raises(
         self, deployer: DockerDeployer, nonexistent_host_path: str
     ):
         config = NodeConfig(os="alpine", cpu_limit=1, mem_limit="256m")
@@ -696,21 +700,22 @@ class TestDockerDeployerIntegration:
 
     # ----- ТЕСТЫ ДЛЯ ЭКСПЕРИМЕНТОВ
 
-    def test_E__two_internal_networks_and_switch(self, deployer: DockerDeployer):
+    def test_NET_4__two_internal_networks_and_switch(self, deployer: DockerDeployer):
         node_config = NodeConfig(
             os="alpine",
             cpu_limit=1,
             mem_limit="256m",
-            net_settings_roots=True,
-            connect_to_docker_default=False,
+            docker_linux_caps_add=["NET_ADMIN"],
+            docker_default_bridge_connection=False,
         )
 
         switch_config = NodeConfig(
             os="alpine",
             cpu_limit=1,
             mem_limit="256m",
-            ip_forwarding=True,
-            connect_to_docker_default=False,
+            docker_linux_caps_add=["NET_ADMIN"],
+            docker_default_bridge_connection=False,
+            docker_container_ip_forwarding=True,
         )
 
         net_config = NetConfig(internal=False)
@@ -803,7 +808,7 @@ class TestDockerDeployerIntegration:
 
     # ----- ТЕСТЫ ДЛЯ СНЭПШОТОВ
 
-    def test_F__snapshot_archive_exists(self, deployer: DockerDeployer):
+    def test_SNAPSHOT_1__snapshot_archive_exists(self, deployer: DockerDeployer):
         node_config = NodeConfig(os="alpine", cpu_limit=1, mem_limit="256m")
 
         net_config = NetConfig(internal=False)
@@ -854,7 +859,9 @@ class TestDockerDeployerIntegration:
 
         os.remove(path=os.path.join(snapshot_dir, "my_test_snapshot.tar.gz"))
 
-    def test_G__check_snapshot_archive_internals(self, deployer: DockerDeployer):
+    def test_SNAPSHOT_2__check_snapshot_archive_internals(
+        self, deployer: DockerDeployer
+    ):
         node_config = NodeConfig(os="alpine", cpu_limit=1, mem_limit="256m")
         net_config = NetConfig(internal=False)
         volume_config = VolumeConfig(docker_volume_driver="local")
@@ -904,7 +911,9 @@ class TestDockerDeployerIntegration:
 
         os.remove(tar_file_path)
 
-    def test_H__build_infrastructire_from_snapshot(self, deployer: DockerDeployer):
+    def test_SNAPSHOT_3__build_infrastructire_from_snapshot(
+        self, deployer: DockerDeployer
+    ):
         node_config = NodeConfig(os="alpine", cpu_limit=1, mem_limit="256m")
         net_config = NetConfig(internal=False)
         volume_config = VolumeConfig(docker_volume_driver="local")
@@ -982,7 +991,7 @@ class TestDockerDeployerIntegration:
 
     # ----- ДОПОЛНИТЕЛЬНЫЕ ТЕСТЫ ДЛЯ ТОМОВ
 
-    def test_I__volume_shared_between_two_nodes(self, deployer: DockerDeployer):
+    def test_MOUNT_7__volume_shared_between_two_nodes(self, deployer: DockerDeployer):
         node_config = NodeConfig(cpu_limit=1, mem_limit="256m", os="alpine")
 
         node_a = deployer.put_node_config(name="node_a", config=node_config)
@@ -1024,7 +1033,7 @@ class TestDockerDeployerIntegration:
         node_b.stop(0)
         deployer.clear_infrastructure()
 
-    def test_K__volume_driver_opts_tmpfs_size_limit_enforced(
+    def test_MOUNT_8__volume_driver_opts_tmpfs_size_limit_enforced(
         self, deployer: DockerDeployer
     ):
         node_config = NodeConfig(cpu_limit=1, mem_limit="512m", os="alpine")
@@ -1067,11 +1076,14 @@ class TestDockerDeployerIntegration:
 
     # ----- ТЕСТЫ ДЛЯ IPV4/IPV6 И СТАТИЧЕСКИХ АДРЕСОВ
 
-    def test_L__network_ipv4_only_assigns_ipv4_addresses(
+    def test_NET_5__network_ipv4_only_assigns_ipv4_addresses(
         self, deployer: DockerDeployer
     ):
         node_config = NodeConfig(
-            cpu_limit=1, mem_limit="256m", os="alpine", connect_to_docker_default=False
+            cpu_limit=1,
+            mem_limit="256m",
+            os="alpine",
+            docker_default_bridge_connection=False,
         )
         net_config = NetConfig(internal=False, ipv4=True, ipv6=False)
 
@@ -1099,11 +1111,14 @@ class TestDockerDeployerIntegration:
         a.stop(0)
         deployer.clear_infrastructure()
 
-    def test_M__network_dual_stack_ipv4_ipv6_assigns_both_addresses(
+    def test_NET_6__network_dual_stack_ipv4_ipv6_assigns_both_addresses(
         self, deployer: DockerDeployer
     ):
         node_config = NodeConfig(
-            cpu_limit=1, mem_limit="256m", os="alpine", connect_to_docker_default=False
+            cpu_limit=1,
+            mem_limit="256m",
+            os="alpine",
+            docker_default_bridge_connection=False,
         )
         net_config = NetConfig(internal=False, ipv4=True, ipv6=True)
 
@@ -1138,11 +1153,14 @@ class TestDockerDeployerIntegration:
         b.stop(0)
         deployer.clear_infrastructure()
 
-    def test_N__node_gets_requested_static_ipv4(
+    def test_NET_7__node_gets_requested_static_ipv4(
         self, deployer: DockerDeployer, ipv4_subnet: ipaddress.IPv4Network
     ):
         node_config = NodeConfig(
-            cpu_limit=1, mem_limit="256m", os="alpine", connect_to_docker_default=False
+            cpu_limit=1,
+            mem_limit="256m",
+            os="alpine",
+            docker_default_bridge_connection=False,
         )
         net_config = NetConfig(
             docker_net_driver="bridge", internal=True, ipv4=True, ipv6=False
@@ -1170,11 +1188,14 @@ class TestDockerDeployerIntegration:
         node.stop(0)
         deployer.clear_infrastructure()
 
-    def test_O__node_gets_requested_static_ipv6(
+    def test_NET_8__node_gets_requested_static_ipv6(
         self, deployer: DockerDeployer, ipv6_subnet: ipaddress.IPv6Network
     ):
         node_config = NodeConfig(
-            cpu_limit=1, mem_limit="256m", os="alpine", connect_to_docker_default=False
+            cpu_limit=1,
+            mem_limit="256m",
+            os="alpine",
+            docker_default_bridge_connection=False,
         )
 
         net_config = NetConfig(internal=False, ipv4=False, ipv6=True)
@@ -1200,11 +1221,14 @@ class TestDockerDeployerIntegration:
         node.stop(0)
         deployer.clear_infrastructure()
 
-    def test_P__two_nodes_with_static_ipv4_no_conflict_and_can_communicate(
+    def test_NET_9__two_nodes_with_static_ipv4_no_conflict_and_can_communicate(
         self, deployer: DockerDeployer, ipv4_subnet: ipaddress.IPv4Network
     ):
         node_config = NodeConfig(
-            cpu_limit=1, mem_limit="256m", os="alpine", connect_to_docker_default=False
+            cpu_limit=1,
+            mem_limit="256m",
+            os="alpine",
+            docker_default_bridge_connection=False,
         )
         net_config = NetConfig(internal=False, ipv4=True, ipv6=False)
 
@@ -1244,7 +1268,7 @@ class TestDockerDeployerIntegration:
 
     # ----- ДОПОЛНИТЕЛЬНЫЙ ТЕСТ ДЛЯ СНЭПШОТОВ
 
-    def test_Q__snapshot_restore_preserves_host_mounted_directory_data(
+    def test_SNAPSHOT_4__snapshot_restore_preserves_host_mounted_directory_data(
         self, deployer: DockerDeployer, host_temp_dir: str
     ):
         node_config = NodeConfig(os="alpine", cpu_limit=1, mem_limit="256m")
@@ -1316,17 +1340,20 @@ class TestDockerDeployerIntegration:
         if os.path.exists(tar_path):
             os.remove(tar_path)
 
-    def test_R__three_node_network_with_volumes_and_snapshot_of_dev_toolchain(
+    def test_SNAPSHOT_5__three_node_network_with_volumes_and_snapshot_of_dev_toolchain(
         self, deployer: DockerDeployer
     ):
         light_node_config = NodeConfig(
-            cpu_limit=1, mem_limit="256m", os="alpine", connect_to_docker_default=False
+            cpu_limit=1,
+            mem_limit="256m",
+            os="alpine",
+            docker_default_bridge_connection=False,
         )
         database_config = NodeConfig(
             cpu_limit=4,
             mem_limit="8g",
             os="ubuntu:latest",
-            connect_to_docker_default=False,
+            docker_default_bridge_connection=False,
         )
         net_config = NetConfig(internal=False, ipv4=True, ipv6=False)
 
@@ -1461,6 +1488,29 @@ class TestDockerDeployerIntegration:
         tar_path = os.path.join(snapshot_dir, "pg_dev_infra_snapshot.tar.gz")
         if os.path.exists(tar_path):
             os.remove(tar_path)
+
+    # ----- ТЕСТЫ ПЕРЕМЕННЫХ ОКРУЖЕНИЯ
+
+    def test_ENV_1_environment_variables_exists(self, deployer: DockerDeployer):
+        env = {"SECRET": "my_secret", "MY_PORT": "5432", "DB": "POSTGRES"}
+
+        config = NodeConfig(
+            os="alpine", cpu_limit=1, mem_limit="512m", docker_container_env=env
+        )
+
+        node = deployer.put_node_config(name="node", config=config)
+
+        node.deploy()
+        node.start()
+
+        for var, value in env.items():
+            echo_result = node.exec(command=f'sh -c "echo ${var}"')
+
+            assert self.__check_exit_code(
+                exec_result=echo_result, expected=0, equal=True
+            )
+
+            assert value == echo_result.stdout.strip("\n")  # type: ignore
 
     # ----- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
 
