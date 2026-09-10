@@ -70,11 +70,8 @@ class DockerClientSession:
                 mem_limit=config.mem_limit,
                 detach=True,
                 name=name,
-                cap_add=config.docker_linux_cap_add,
-                cap_drop=config.docker_linux_cap_drop,
                 mounts=self.__make_mount_list(mount_configs=mount_configs),
-                environment=config.docker_environment,
-                sysctls=self.__make_sysctls_dict(config=config),
+                **config.docker_params.to_host_config_kwargs(),
             )
         except docker.errors.ImageNotFound as err:
             raise docker_exceptions.ResourceCreationError(
@@ -86,7 +83,7 @@ class DockerClientSession:
                 f"server returns an error"
             ) from err
 
-        if not (config.docker_default_bridge_connection):
+        if config.docker_params.detach_from_default_bridge:
             try:
                 container.start()
             except docker.errors.APIError as err:
@@ -215,14 +212,6 @@ class DockerClientSession:
                 )
 
         return mount_list
-
-    def __make_sysctls_dict(self, config: NodeConfig) -> dict[str, str] | None:
-        sysctl_dict: dict[str, str] = {}
-
-        if config.docker_container_ip_forwarding:
-            sysctl_dict["net.ipv4.ip_forward"] = "1"
-
-        return sysctl_dict if sysctl_dict else None
 
     def __make_docker_ipam_config(
         self, subnet_configs: list[SubnetConfig]

@@ -412,21 +412,16 @@ class SnapshotInfraBuilder:
             raise docker_exceptions.FailedToBuildDockerNode(f"failed to get a state")
 
         if "config" in node_data:
-            config = typing.cast(dict[str, typing.Any], node_data["config"])
+            config_data = typing.cast(dict[str, typing.Any], node_data["config"])
         else:
             raise docker_exceptions.FailedToBuildDockerNode(f"failed to get a config")
 
         try:
-            nc_values: dict[str, typing.Any] = {
-                field: config[field]
-                for field in inspect.signature(NodeConfig).parameters.keys()
-            }
+            nc = NodeConfig.from_dict(data=config_data)
         except Exception:
             raise docker_exceptions.FailedToBuildDockerNode(
                 f"failed to fetch correct config"
             )
-
-        nc = NodeConfig(**nc_values)
 
         node = deployer.put_node_config(name=name, config=nc)
         node = typing.cast(docker_node.DockerNode, node)

@@ -20,7 +20,7 @@ from pg_polygon_orchestr import common_exceptions, docker_exceptions
 from pg_polygon_orchestr import ExecResult, MountConfig
 from pg_polygon_orchestr import SnapshotInfraBuilder, find_snap_desc
 from pg_polygon_orchestr import HostPathDesc
-from pg_polygon_orchestr import SubnetConfig
+from pg_polygon_orchestr import SubnetConfig, DockerNodeOptions
 
 pytestmark = pytest.mark.integration
 
@@ -361,7 +361,7 @@ class TestDockerDeployerIntegration:
             cpu_limit=1,
             mem_limit="256m",
             os="alpine",
-            docker_default_bridge_connection=False,
+            docker_params=DockerNodeOptions(detach_from_default_bridge=True),
         )
 
         a = deployer.put_node_config(name="node_a", config=config)
@@ -422,7 +422,7 @@ class TestDockerDeployerIntegration:
             cpu_limit=1,
             mem_limit="512m",
             os="alpine:latest",
-            docker_default_bridge_connection=False,
+            docker_params=DockerNodeOptions(detach_from_default_bridge=True),
         )
 
         a = deployer.put_node_config(name="node_a", config=config)
@@ -473,9 +473,11 @@ class TestDockerDeployerIntegration:
             cpu_limit=1,
             mem_limit="512m",
             os="ubuntu:latest",
-            docker_container_ip_forwarding=True,
-            docker_linux_caps_add=["NET_ADMIN"],
-            docker_default_bridge_connection=False,
+            docker_params=DockerNodeOptions(
+                cap_add=["NET_ADMIN"],
+                detach_from_default_bridge=True,
+                sysctls={"net.ipv4.ip_forward": "1"},
+            ),
         )
 
         a = deployer.put_node_config(name="node_a", config=config)
@@ -732,17 +734,20 @@ class TestDockerDeployerIntegration:
             os="alpine",
             cpu_limit=1,
             mem_limit="256m",
-            docker_linux_caps_add=["NET_ADMIN"],
-            docker_default_bridge_connection=False,
+            docker_params=DockerNodeOptions(
+                cap_add=["NET_ADMIN"], detach_from_default_bridge=True
+            ),
         )
 
         switch_config = NodeConfig(
             os="alpine",
             cpu_limit=1,
             mem_limit="256m",
-            docker_linux_caps_add=["NET_ADMIN"],
-            docker_default_bridge_connection=False,
-            docker_container_ip_forwarding=True,
+            docker_params=DockerNodeOptions(
+                cap_add=["NET_ADMIN"],
+                detach_from_default_bridge=True,
+                sysctls={"net.ipv4.ip_forward": "1"},
+            ),
         )
 
         net_config = NetConfig(internal=False)
@@ -1141,7 +1146,7 @@ class TestDockerDeployerIntegration:
             cpu_limit=1,
             mem_limit="256m",
             os="alpine",
-            docker_default_bridge_connection=False,
+            docker_params=DockerNodeOptions(detach_from_default_bridge=True),
         )
         net_config = NetConfig(internal=False)
 
@@ -1181,7 +1186,7 @@ class TestDockerDeployerIntegration:
             cpu_limit=1,
             mem_limit="256m",
             os="alpine",
-            docker_default_bridge_connection=False,
+            docker_params=DockerNodeOptions(detach_from_default_bridge=True),
         )
         net_config = NetConfig(internal=True)
 
@@ -1215,7 +1220,7 @@ class TestDockerDeployerIntegration:
             cpu_limit=1,
             mem_limit="256m",
             os="alpine",
-            docker_default_bridge_connection=False,
+            docker_params=DockerNodeOptions(detach_from_default_bridge=True),
         )
         net_config = NetConfig(internal=False)
 
@@ -1335,13 +1340,13 @@ class TestDockerDeployerIntegration:
             cpu_limit=1,
             mem_limit="256m",
             os="alpine",
-            docker_default_bridge_connection=False,
+            docker_params=DockerNodeOptions(detach_from_default_bridge=True),
         )
         database_config = NodeConfig(
             cpu_limit=4,
             mem_limit="8g",
             os="ubuntu:latest",
-            docker_default_bridge_connection=False,
+            docker_params=DockerNodeOptions(detach_from_default_bridge=True),
         )
         net_config = NetConfig(internal=False)
 
@@ -1489,7 +1494,10 @@ class TestDockerDeployerIntegration:
         env = {"SECRET": "my_secret", "MY_PORT": "5432", "DB": "POSTGRES"}
 
         config = NodeConfig(
-            os="alpine", cpu_limit=1, mem_limit="512m", docker_container_env=env
+            os="alpine",
+            cpu_limit=1,
+            mem_limit="512m",
+            docker_params=DockerNodeOptions(environment=env),
         )
 
         node = deployer.put_node_config(name="node", config=config)
