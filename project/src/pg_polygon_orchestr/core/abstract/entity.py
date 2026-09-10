@@ -1,15 +1,15 @@
 from abc import ABC, abstractmethod
 from uuid import UUID
-import typing
 
-from ..meta import Type, EntityState, MountConfig
+from ..meta import Type, EntityState, MountConfig, SubnetConfig
+from ..serializable import Serializable
 
 
-class Entity(ABC):
+class Entity(Serializable, ABC):
     """Базовый класс для Volume, Node и Network"""
 
     @abstractmethod
-    def deploy(self, **options: str | list[MountConfig]):
+    def deploy(self, **options: str | list[MountConfig] | list[SubnetConfig]):
         pass
 
     @abstractmethod
@@ -34,10 +34,6 @@ class Entity(ABC):
 
     @abstractmethod
     def real_name(self) -> str:
-        pass
-
-    @abstractmethod
-    def transform_to_mapping(self) -> typing.Mapping[str, typing.Any]:
         pass
 
     @abstractmethod

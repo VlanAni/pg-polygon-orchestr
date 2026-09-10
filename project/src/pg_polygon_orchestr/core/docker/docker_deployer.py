@@ -77,13 +77,6 @@ class DockerDeployer(Deployer):
                 self.__docker_volumes.get_entity_by_name(d_volume.inf_name()),
             )
 
-    def deploy_infrastructure(self) -> None:
-        self.__deploy_volumes()
-
-        self.__deploy_networks()
-
-        self.__deploy_nodes()
-
     def clear_infrastructure(self) -> None:
         self.__clear_nodes()
 
@@ -112,7 +105,7 @@ class DockerDeployer(Deployer):
     def get_id(self) -> uuid.UUID:
         return self.__uuid
 
-    def transform_to_mapping(self) -> Mapping[str, typing.Any]:
+    def serialize(self) -> Mapping[str, typing.Any]:
         return {
             "type": Type.DOCKER,
             "uuid": self.__uuid,
@@ -310,63 +303,6 @@ class DockerDeployer(Deployer):
         return SnapshotDescription(name=snapshot_name)
 
     # ------ приватные методы
-
-    def __deploy_volumes(self) -> None:
-        """_summary_
-
-        Raises:
-            docker_exceptions.DockerDeployError: _description_
-        """
-        for volume_name in list(self.__docker_volumes.get_name_map().keys()):
-            volume = self.__docker_volumes.get_entity_by_name(name=volume_name)
-            volume = typing.cast(docker_volume.DockerVolume, volume)
-
-            try:
-                volume.deploy()
-            except common_exceptions.EntityIsRemovedException:
-                self.__docker_volumes.pop_object_from_registry(
-                    deployer=self, entity=volume
-                )
-            except common_exceptions.EntityIsAlreadyDeployed:
-                pass
-            except docker_exceptions.DockerDeployError as err:
-                raise docker_exceptions.DockerDeployError(
-                    f"failed to deploy the volume {volume_name}"
-                ) from err
-
-    def __deploy_networks(self) -> None:
-        for net_name in list(self.__docker_networks.get_name_map().keys()):
-            network = self.__docker_networks.get_entity_by_name(name=net_name)
-            network = typing.cast(docker_network.DockerNetwork, network)
-
-            try:
-                network.deploy()
-            except common_exceptions.EntityIsRemovedException:
-                self.__docker_networks.pop_object_from_registry(
-                    deployer=self, entity=network
-                )
-            except common_exceptions.EntityIsAlreadyDeployed:
-                pass
-            except docker_exceptions.DockerDeployError as err:
-                raise docker_exceptions.DockerDeployError(
-                    f"failed to deploy the network {net_name}"
-                ) from err
-
-    def __deploy_nodes(self) -> None:
-        for node_name in list(self.__docker_nodes.get_name_map().keys()):
-            node = self.__docker_nodes.get_entity_by_name(name=node_name)
-            node = typing.cast(docker_node.DockerNode, node)
-
-            try:
-                node.deploy()
-            except common_exceptions.EntityIsRemovedException:
-                self.__docker_nodes.pop_object_from_registry(deployer=self, entity=node)
-            except common_exceptions.EntityIsAlreadyDeployed:
-                pass
-            except docker_exceptions.DockerDeployError as err:
-                raise docker_exceptions.DockerDeployError(
-                    f"failed to deploy the node {node_name}"
-                ) from err
 
     def __clear_nodes(self) -> None:
         for node_name in list(self.__docker_nodes.get_name_map().keys()):

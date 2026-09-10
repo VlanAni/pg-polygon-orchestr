@@ -8,7 +8,7 @@ import docker.types as dockerapi_types
 from pathlib import Path
 
 from ..configs import NodeConfig, NetConfig, VolumeConfig
-from ..meta import MountConfig, MountableType
+from ..meta import MountConfig, MountableType, SubnetConfig
 from ..exception import docker_exceptions
 
 
@@ -162,22 +162,16 @@ class DockerClientSession:
         self,
         name: str,
         config: NetConfig,
-        ip: str | None = None,
-        gateway_ip: str | None = None,
-    ) -> dockerapi_networks.Network | None:
+        subnet_configs: list[SubnetConfig],
+    ) -> dockerapi_networks.Network:
         if self.__session is None:
             self.__session = docker.from_env()
 
-        ipam_config = None
+        ipam_config = self.__make_docker_ipam_config(subnet_configs=subnet_configs)
 
-        if ip and gateway_ip:
-            ipam_config = dockerapi_types.IPAMConfig(
-                pool_configs=[dockerapi_types.IPAMPool(subnet=ip, gateway=gateway_ip)]
-            )
         try:
             network = self.__session.networks.create(
                 name=name,
-                enable_ipv6=config.ipv6,
                 driver=config.docker_net_driver,
                 internal=config.internal,
                 ipam=ipam_config,
@@ -226,7 +220,18 @@ class DockerClientSession:
         sysctl_dict: dict[str, str] = {}
 
         if config.docker_container_ip_forwarding:
-            sysctl_dict["net.ipv6.conf.all.forwarding"] = "1"
             sysctl_dict["net.ipv4.ip_forward"] = "1"
 
         return sysctl_dict if sysctl_dict else None
+
+    def __make_docker_ipam_config(
+        self, subnet_configs: list[SubnetConfig]
+    ) -> dockerapi_types.IPAMConfig:
+        return dockerapi_types.IPAMConfig(
+            pool_configs=[
+                dockerapi_types.IPAMPool(
+                    subnet=sc.subnet.with_prefixlen, gateway=str(sc.gateway)
+                )
+                for sc in subnet_configs
+            ]
+        )

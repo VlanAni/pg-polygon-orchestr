@@ -1,7 +1,7 @@
 # abstract class for deploying nodes using its config
 
 from abc import ABC, abstractmethod
-from typing import Any, Mapping
+from typing import Mapping
 import uuid
 
 from .node import Node
@@ -10,9 +10,10 @@ from .network import Network
 
 from ..configs import NetConfig, NodeConfig, VolumeConfig
 from ..meta import SnapshotDescription
+from ..serializable import Serializable
 
 
-class Deployer(ABC):
+class Deployer(Serializable, ABC):
     """Интерфейс `Deployer`
 
     Предоставляет методы для управления инфраструктурой
@@ -20,14 +21,6 @@ class Deployer(ABC):
     """
 
     # ----- ДЕПЛОИНГ ИНФРАСТРУКТУРЫ
-
-    @abstractmethod
-    def deploy_infrastructure(self) -> None:
-        """Выполнить `deploy()` для всех элементов инфраструктуры без дополнительных опций
-        Raises:
-            common_exception.DeployError: не получилось выполнить `deploy()` для всех элементов
-        """
-        pass
 
     @abstractmethod
     def clear_infrastructure(self) -> None:
@@ -125,10 +118,6 @@ class Deployer(ABC):
         pass
 
     # ----- SNAPSHOTS
-
-    @abstractmethod
-    def transform_to_mapping(self) -> Mapping[str, Any]:
-        pass
 
     @abstractmethod
     def make_snapshot(
