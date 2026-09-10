@@ -1,5 +1,6 @@
 from json import JSONEncoder
 import typing
+import types
 from uuid import UUID
 import enum
 import ipaddress
@@ -14,6 +15,9 @@ class CustomEncoder(JSONEncoder):
 
         if isinstance(o, UUID):
             return str(o)
+
+        if isinstance(o, types.MappingProxyType):
+            return dict(o)  # type: ignore
 
         if isinstance(o, enum.Enum):
             return o.name
