@@ -20,6 +20,7 @@ from pg_polygon_orchestr import common_exceptions, docker_exceptions
 from pg_polygon_orchestr import ExecResult, MountConfig
 from pg_polygon_orchestr import SnapshotInfraBuilder, find_snap_desc
 from pg_polygon_orchestr import HostPathDesc
+from pg_polygon_orchestr import SubnetConfig
 
 pytestmark = pytest.mark.integration
 
@@ -76,14 +77,30 @@ def nonexistent_host_path():
 
 @pytest.fixture
 def ipv4_subnet() -> ipaddress.IPv4Network:
-    third_octet = random.randint(20, 250)
-    return ipaddress.ip_network(f"172.{third_octet}.0.0/24")  # type: ignore
+    third_octet = random.randint(16, 32)
+    return ipaddress.ip_network(f"10.{third_octet}.0.0/24")  # type: ignore
 
 
-@pytest.fixture
-def ipv6_subnet() -> ipaddress.IPv6Network:
-    segment = f"{random.randint(0x1000, 0xffff):04x}"
-    return ipaddress.ip_network(f"fd00:{segment}:1::/64")  # type: ignore
+def generate_private_subnets(
+    count: int = 5,
+) -> list[ipaddress.IPv4Network]:
+    if count < 1:
+        raise ValueError(f"count must be positive")
+
+    subnets: list[ipaddress.IPv4Network] = []
+
+    mask = 24
+
+    while len(subnets) < count:
+        second_octet = random.randint(16, 31)
+        third_octet = random.randint(0, 255)
+        net = ipaddress.IPv4Network(
+            f"10.{second_octet}.{third_octet}.0/{mask}", strict=False
+        )
+        if net not in subnets:
+            subnets.append(net)
+
+    return subnets
 
 
 CONTAINER_MOUNT_DIR = "/mnt/test_data"
@@ -115,7 +132,8 @@ class TestDockerDeployerIntegration:
         with pytest.raises(common_exceptions.EntityIsNotDeployed):
             node_a.start()
 
-        deployer.deploy_infrastructure()
+        node_a.deploy()
+        node_b.deploy()
 
         with pytest.raises(common_exceptions.EntityIsAlreadyDeployed):
             node_a.deploy()
@@ -179,9 +197,8 @@ class TestDockerDeployerIntegration:
         node_c = deployer.put_node_config(name="node_c", config=config2)
         node_d = deployer.put_node_config(name="node_d", config=config2)
 
-        deployer.deploy_infrastructure()
-
         for node in [node_a, node_b, node_c, node_d]:
+            node.deploy()
             node.start()
 
         client = docker.from_env()
@@ -240,8 +257,7 @@ class TestDockerDeployerIntegration:
         node = deployer.put_node_config(name="node", config=config)
         assert node
 
-        deployer.deploy_infrastructure()
-
+        node.deploy()
         node.start()
 
         node.update(new_config)
@@ -273,8 +289,7 @@ class TestDockerDeployerIntegration:
         print(node.state().name)
         node.update(new_config=new_config)
 
-        deployer.deploy_infrastructure()
-
+        node.deploy()
         node.start()
 
         checker = docker.from_env()
@@ -300,7 +315,7 @@ class TestDockerDeployerIntegration:
         with pytest.raises(common_exceptions.EntityIsNotDeployed):
             node.exec('echo "hello"')
 
-        deployer.deploy_infrastructure()
+        node.deploy()
 
         with pytest.raises(docker_exceptions.ExecOnContainerError):
             node.exec('echo "hello"')
@@ -340,7 +355,7 @@ class TestDockerDeployerIntegration:
     # ----- СЕТЕВЫЕ ТЕСТЫ
 
     def test_NET_1__internal_network_with_two_containers(
-        self, deployer: DockerDeployer
+        self, deployer: DockerDeployer, ipv4_subnet: ipaddress.IPv4Network
     ):
         config = NodeConfig(
             cpu_limit=1,
@@ -354,6 +369,9 @@ class TestDockerDeployerIntegration:
 
         assert a and b
 
+        for node in [a, b]:
+            node.deploy()
+
         net_config = NetConfig(
             internal=True,
         )
@@ -361,15 +379,22 @@ class TestDockerDeployerIntegration:
         net = deployer.put_network_config(name="net", config=net_config)
 
         with pytest.raises(common_exceptions.EntityIsNotDeployed):
-            net.connect_node(node=a)
-
-        deployer.deploy_infrastructure()
+            net.connect(node=a, subnet_label="placeholder")
 
         a.start()
         b.start()
 
-        net.connect_node(node=a)
-        net.connect_node(node=b)
+        subnet_hosts_iter = ipv4_subnet.hosts()
+        gateway = next(subnet_hosts_iter)
+
+        net.deploy(
+            subnet_configs=[
+                SubnetConfig(label="1", subnet=ipv4_subnet, gateway=gateway)
+            ]
+        )
+
+        net.connect(node=a, subnet_label=net.subnets()[0].label)
+        net.connect(node=b, subnet_label=net.subnets()[0].label)
 
         a_ping_b_result = a.exec(f"ping -c 1 {b.real_name()}")
         assert self.__check_exit_code(a_ping_b_result, 0, True)
@@ -383,26 +408,15 @@ class TestDockerDeployerIntegration:
         assert self.__check_exit_code(a_ping_google, 0, False)
         assert self.__check_exit_code(b_ping_google, 0, False)
 
-        net.disconnect_node(node=a)
+        net.disconnect(node=a)
 
         a_ping_b_after_disconnect = a.exec(f"ping -c 1 {b.real_name()}")
         assert self.__check_exit_code(a_ping_b_after_disconnect, 0, False)
 
-        net.disconnect_node(node=b)
-
-        a.stop(1)
-        a.clear()
-        b.stop(1)
-        b.clear()
-
-        with pytest.raises(common_exceptions.ConnectToNetError):
-            net.connect_node(node=a)
-
-        with pytest.raises(common_exceptions.ConnectToNetError):
-            net.connect_node(node=b)
+        net.disconnect(node=b)
 
     def test_NET_2__public_network_with_three_containers(
-        self, deployer: DockerDeployer
+        self, deployer: DockerDeployer, ipv4_subnet: ipaddress.IPv4Network
     ):
         config = NodeConfig(
             cpu_limit=1,
@@ -419,14 +433,22 @@ class TestDockerDeployerIntegration:
 
         net = deployer.put_network_config(name="net", config=net_config)
 
-        deployer.deploy_infrastructure()
-
         for node in [a, b, c]:
+            node.deploy()
             node.start()
 
-        net.connect_node(node=a)
-        net.connect_node(node=b)
-        net.connect_node(node=c)
+        hosts = ipv4_subnet.hosts()
+        gateway = next(hosts)
+
+        net.deploy(
+            subnet_configs=[
+                SubnetConfig(label="1", subnet=ipv4_subnet, gateway=gateway)
+            ]
+        )
+
+        net.connect(node=a, subnet_label=net.subnets()[0].label)
+        net.connect(node=b, subnet_label=net.subnets()[0].label)
+        net.connect(node=c, subnet_label=net.subnets()[0].label)
 
         a_ping_b = a.exec(f"ping -c 1 {b.real_name()}")
         a_ping_c = a.exec(f"ping -c 1 {c.real_name()}")
@@ -468,6 +490,17 @@ class TestDockerDeployerIntegration:
         net3 = deployer.put_network_config(name="net3", config=net_config)
         net4 = deployer.put_network_config(name="net4", config=net_config)
 
+        subnets = generate_private_subnets(count=4)
+        gateways = [next(subnet.hosts()) for subnet in subnets]
+        docker_nets = [net1, net2, net3, net4]
+
+        for i in range(len(subnets)):
+            docker_nets[i].deploy(
+                subnet_configs=[
+                    SubnetConfig(label="1", subnet=subnets[i], gateway=gateways[i])
+                ]
+            )
+
         routes = [
             (a, c, b, net1, net2),
             (b, d, c, net2, net3),
@@ -475,24 +508,25 @@ class TestDockerDeployerIntegration:
             (d, b, a, net4, net1),
         ]
 
-        deployer.deploy_infrastructure()
+        for node in [a, b, c, d]:
+            node.deploy()
 
         a.start()
         b.start()
         c.start()
         d.start()
 
-        net1.connect_node(node=a)
-        net1.connect_node(node=b)
+        net1.connect(node=a, subnet_label=net1.subnets()[0].label)
+        net1.connect(node=b, subnet_label=net1.subnets()[0].label)
 
-        net2.connect_node(node=b)
-        net2.connect_node(node=c)
+        net2.connect(node=b, subnet_label=net2.subnets()[0].label)
+        net2.connect(node=c, subnet_label=net2.subnets()[0].label)
 
-        net3.connect_node(node=c)
-        net3.connect_node(node=d)
+        net3.connect(node=c, subnet_label=net3.subnets()[0].label)
+        net3.connect(node=d, subnet_label=net3.subnets()[0].label)
 
-        net4.connect_node(node=a)
-        net4.connect_node(node=d)
+        net4.connect(node=a, subnet_label=net4.subnets()[0].label)
+        net4.connect(node=d, subnet_label=net4.subnets()[0].label)
 
         for node in [a, b, c, d]:
             node.exec(
@@ -500,11 +534,11 @@ class TestDockerDeployerIntegration:
             )
 
         for source, target, via_node, source_net, target_net in routes:
-            target_ip = target_net.get_node_network_ip(node=target)
-            via_ip = source_net.get_node_network_ip(node=via_node)
-            target_subnet = target_net.get_network_ip()
+            target_ip = target_net.get_node_connection_info(node=target).addr
+            via_ip = source_net.get_node_connection_info(node=via_node).addr
+            target_net_addr = target_net.subnets()[0].subnet
 
-            route_result = source.exec(f"ip route add {target_subnet} via {via_ip}")
+            route_result = source.exec(f"ip route add {target_net_addr} via {via_ip}")
             assert self.__check_exit_code(route_result, 0, True)
 
             ping_result = source.exec(f"ping -c 1 {target_ip}")
@@ -512,14 +546,7 @@ class TestDockerDeployerIntegration:
 
             traceroute_result = source.exec(f"traceroute -n {target_ip}")
             assert self.__check_exit_code(traceroute_result, 0, True)
-            assert via_ip in traceroute_result.stdout  # type: ignore
-
-        a.stop(0)
-        b.stop(0)
-        c.stop(0)
-        d.stop(0)
-
-        deployer.clear_infrastructure()
+            assert str(via_ip) in traceroute_result.stdout  # type: ignore
 
     # ----- ТЕСТЫ ДЛЯ ТОМОВ И РЕСУРСОВ ХОСТА
 
@@ -724,38 +751,52 @@ class TestDockerDeployerIntegration:
         b = deployer.put_node_config(name="node_b", config=node_config)
         c = deployer.put_node_config(name="node_c", config=node_config)
         d = deployer.put_node_config(name="node_d", config=node_config)
-
         switch = deployer.put_node_config(name="switch", config=switch_config)
+
+        for node in [a, b, c, d, switch]:
+            node.deploy()
 
         net1 = deployer.put_network_config(name="net_1", config=net_config)
         net2 = deployer.put_network_config(name="net_2", config=net_config)
 
-        deployer.deploy_infrastructure()
+        subnets = generate_private_subnets(count=2)
+        gateways = [next(subnet.hosts()) for subnet in subnets]
+
+        net1.deploy(
+            subnet_configs=[
+                SubnetConfig(label="1", subnet=subnets[0], gateway=gateways[0])
+            ]
+        )
+        net2.deploy(
+            subnet_configs=[
+                SubnetConfig(label="1", subnet=subnets[1], gateway=gateways[1])
+            ]
+        )
 
         a.start()
         b.start()
         c.start()
         d.start()
 
-        net1.connect_node(node=a)
-        net1.connect_node(node=b)
+        net1.connect(node=a, subnet_label=net1.subnets()[0].label)
+        net1.connect(node=b, subnet_label=net1.subnets()[0].label)
 
-        net2.connect_node(node=c)
-        net2.connect_node(node=d)
+        net2.connect(node=c, subnet_label=net2.subnets()[0].label)
+        net2.connect(node=d, subnet_label=net2.subnets()[0].label)
 
         switch.start()
 
-        net1.connect_node(node=switch)
-        net2.connect_node(node=switch)
+        net1.connect(node=switch, subnet_label=net1.subnets()[0].label)
+        net2.connect(node=switch, subnet_label=net2.subnets()[0].label)
 
-        a_ip = net1.get_node_network_ip(node=a)
-        b_ip = net1.get_node_network_ip(node=b)
-        c_ip = net2.get_node_network_ip(node=c)
-        d_ip = net2.get_node_network_ip(node=d)
-        switch_net1_ip = net1.get_node_network_ip(node=switch)
-        switch_net2_ip = net2.get_node_network_ip(node=switch)
-        net1_ip = net1.get_network_ip()
-        net2_ip = net2.get_network_ip()
+        a_ip = net1.get_node_connection_info(node=a).addr
+        b_ip = net1.get_node_connection_info(node=b).addr
+        c_ip = net2.get_node_connection_info(node=c).addr
+        d_ip = net2.get_node_connection_info(node=d).addr
+        switch_net1_ip = net1.get_node_connection_info(node=switch).addr
+        switch_net2_ip = net2.get_node_connection_info(node=switch).addr
+        net1_ip = net1.subnets()[0].subnet
+        net2_ip = net2.subnets()[0].subnet
 
         for node_net_1 in [a, b]:
             net_2_route = node_net_1.exec(
@@ -801,14 +842,11 @@ class TestDockerDeployerIntegration:
 
             assert self.__check_exit_code(ping_b, 0, True)
 
-        for node in [a, b, c, d, switch]:
-            node.stop(0)
-
-        deployer.clear_infrastructure()
-
     # ----- ТЕСТЫ ДЛЯ СНЭПШОТОВ
 
-    def test_SNAPSHOT_1__snapshot_archive_exists(self, deployer: DockerDeployer):
+    def test_SNAPSHOT_1__snapshot_archive_exists(
+        self, deployer: DockerDeployer, ipv4_subnet: ipaddress.IPv4Network
+    ):
         node_config = NodeConfig(os="alpine", cpu_limit=1, mem_limit="256m")
 
         net_config = NetConfig(internal=False)
@@ -819,7 +857,13 @@ class TestDockerDeployerIntegration:
         net = deployer.put_network_config("net", config=net_config)
         vol = deployer.put_volume_config("vol", config=volume_config)
 
-        net.deploy()
+        gateway = next(ipv4_subnet.hosts())
+
+        net.deploy(
+            subnet_configs=[
+                SubnetConfig(label="1", subnet=ipv4_subnet, gateway=gateway)
+            ]
+        )
         vol.deploy()
         node.deploy(
             mount_configs=[
@@ -833,7 +877,7 @@ class TestDockerDeployerIntegration:
 
         node.start()
 
-        net.connect_node(node=node)
+        net.connect(node=node, subnet_label=net.subnets()[0].label)
 
         deployer.make_snapshot()
 
@@ -860,7 +904,7 @@ class TestDockerDeployerIntegration:
         os.remove(path=os.path.join(snapshot_dir, "my_test_snapshot.tar.gz"))
 
     def test_SNAPSHOT_2__check_snapshot_archive_internals(
-        self, deployer: DockerDeployer
+        self, deployer: DockerDeployer, ipv4_subnet: ipaddress.IPv4Network
     ):
         node_config = NodeConfig(os="alpine", cpu_limit=1, mem_limit="256m")
         net_config = NetConfig(internal=False)
@@ -882,13 +926,20 @@ class TestDockerDeployerIntegration:
         net_id = net.get_id()
         vol_id = vol.get_id()
 
-        deployer.deploy_infrastructure()
-
         for n in [node_a, node_b, node_c]:
+            n.deploy()
             n.start()
 
-        net.connect_node(node=node_a)
-        net.connect_node(node=node_c)
+        net.deploy(
+            subnet_configs=[
+                SubnetConfig(
+                    label="1", subnet=ipv4_subnet, gateway=next(ipv4_subnet.hosts())
+                )
+            ]
+        )
+
+        net.connect(node=node_a, subnet_label=net.subnets()[0].label)
+        net.connect(node=node_c, subnet_label=net.subnets()[0].label)
 
         deployer.make_snapshot(snapshot_name="test_snapshot", online=True)
 
@@ -912,7 +963,7 @@ class TestDockerDeployerIntegration:
         os.remove(tar_file_path)
 
     def test_SNAPSHOT_3__build_infrastructire_from_snapshot(
-        self, deployer: DockerDeployer
+        self, deployer: DockerDeployer, ipv4_subnet: ipaddress.IPv4Network
     ):
         node_config = NodeConfig(os="alpine", cpu_limit=1, mem_limit="256m")
         net_config = NetConfig(internal=False)
@@ -924,7 +975,6 @@ class TestDockerDeployerIntegration:
         net = deployer.put_network_config("net", config=net_config)
         vol = deployer.put_volume_config("vol", config=volume_config)
 
-        net.deploy()
         vol.deploy()
 
         mcfg = MountConfig(
@@ -937,9 +987,17 @@ class TestDockerDeployerIntegration:
             node.deploy(mount_configs=[mcfg])
             node.start()
 
-        net.connect_node(node=node_a)
-        net.connect_node(node=node_b)
-        net.connect_node(node=node_c)
+        net.deploy(
+            subnet_configs=[
+                SubnetConfig(
+                    label="1", subnet=ipv4_subnet, gateway=next(ipv4_subnet.hosts())
+                )
+            ]
+        )
+
+        net.connect(node=node_a, subnet_label=net.subnets()[0].label)
+        net.connect(node=node_b, subnet_label=net.subnets()[0].label)
+        net.connect(node=node_c, subnet_label=net.subnets()[0].label)
 
         for node in [node_a, node_b, node_c]:
             pwd_res = node.exec(command="pwd")
@@ -1077,7 +1135,7 @@ class TestDockerDeployerIntegration:
     # ----- ТЕСТЫ ДЛЯ IPV4/IPV6 И СТАТИЧЕСКИХ АДРЕСОВ
 
     def test_NET_5__network_ipv4_only_assigns_ipv4_addresses(
-        self, deployer: DockerDeployer
+        self, deployer: DockerDeployer, ipv4_subnet: ipaddress.IPv4Network
     ):
         node_config = NodeConfig(
             cpu_limit=1,
@@ -1085,16 +1143,24 @@ class TestDockerDeployerIntegration:
             os="alpine",
             docker_default_bridge_connection=False,
         )
-        net_config = NetConfig(internal=False, ipv4=True, ipv6=False)
+        net_config = NetConfig(internal=False)
 
         a = deployer.put_node_config(name="node_a", config=node_config)
         net = deployer.put_network_config(name="net", config=net_config)
 
-        deployer.deploy_infrastructure()
+        a.deploy()
         a.start()
-        net.connect_node(node=a)
 
-        ipv4_addr = net.get_node_network_ip(node=a)
+        net.deploy(
+            subnet_configs=[
+                SubnetConfig(
+                    label="1", subnet=ipv4_subnet, gateway=next(ipv4_subnet.hosts())
+                )
+            ]
+        )
+        net.connect(node=a, subnet_label=net.subnets()[0].label)
+
+        ipv4_addr = net.get_node_connection_info(node=a).addr
         assert ipv4_addr
 
         client = docker.from_env()
@@ -1103,57 +1169,12 @@ class TestDockerDeployerIntegration:
             net_settings = container.attrs["NetworkSettings"]["Networks"][
                 net.real_name()
             ]
-            assert net_settings["IPAddress"] == ipv4_addr
+            assert net_settings["IPAddress"] == str(ipv4_addr)
             assert not net_settings.get("GlobalIPv6Address")
         finally:
             client.close()
 
-        a.stop(0)
-        deployer.clear_infrastructure()
-
-    def test_NET_6__network_dual_stack_ipv4_ipv6_assigns_both_addresses(
-        self, deployer: DockerDeployer
-    ):
-        node_config = NodeConfig(
-            cpu_limit=1,
-            mem_limit="256m",
-            os="alpine",
-            docker_default_bridge_connection=False,
-        )
-        net_config = NetConfig(internal=False, ipv4=True, ipv6=True)
-
-        a = deployer.put_node_config(name="node_a", config=node_config)
-        b = deployer.put_node_config(name="node_b", config=node_config)
-        net = deployer.put_network_config(name="net", config=net_config)
-
-        deployer.deploy_infrastructure()
-        a.start()
-        b.start()
-        net.connect_node(node=a)
-        net.connect_node(node=b)
-
-        client = docker.from_env()
-        try:
-            for node in (a, b):
-                container = client.containers.get(container_id=node.real_name())
-                net_settings = container.attrs["NetworkSettings"]["Networks"][
-                    net.real_name()
-                ]
-                assert net_settings.get("IPAddress")
-                assert net_settings.get("GlobalIPv6Address")
-        finally:
-            client.close()
-
-        ping_ipv6 = a.exec(
-            f'sh -c "ping6 -c 1 {b.real_name()} || ping -6 -c 1 {b.real_name()}"'
-        )
-        assert self.__check_exit_code(ping_ipv6, 0, True)
-
-        a.stop(0)
-        b.stop(0)
-        deployer.clear_infrastructure()
-
-    def test_NET_7__node_gets_requested_static_ipv4(
+    def test_NET_6__node_gets_requested_static_ipv4(
         self, deployer: DockerDeployer, ipv4_subnet: ipaddress.IPv4Network
     ):
         node_config = NodeConfig(
@@ -1162,66 +1183,32 @@ class TestDockerDeployerIntegration:
             os="alpine",
             docker_default_bridge_connection=False,
         )
-        net_config = NetConfig(
-            docker_net_driver="bridge", internal=True, ipv4=True, ipv6=False
-        )
+        net_config = NetConfig(internal=True)
 
         node = deployer.put_node_config(name="node", config=node_config)
         net = deployer.put_network_config(name="net", config=net_config)
 
-        hosts_iter = ipv4_subnet.hosts()
+        hosts = ipv4_subnet.hosts()
+        gateway = next(hosts)
+        static_ip = gateway
 
-        gateway = str(next(hosts_iter))
-        requested_ip = str(next(hosts_iter))
-        for _ in range(10):
-            requested_ip = str(next(hosts_iter))
+        for _ in range(5):
+            static_ip = next(hosts)
 
         node.deploy()
-        net.deploy(ip=str(ipv4_subnet), gateway=gateway)
-
-        node.start()
-        net.connect_node(node=node, ipv4_addr=requested_ip)
-
-        assigned_ip = net.get_node_network_ip(node=node)
-        assert assigned_ip == requested_ip
-
-        node.stop(0)
-        deployer.clear_infrastructure()
-
-    def test_NET_8__node_gets_requested_static_ipv6(
-        self, deployer: DockerDeployer, ipv6_subnet: ipaddress.IPv6Network
-    ):
-        node_config = NodeConfig(
-            cpu_limit=1,
-            mem_limit="256m",
-            os="alpine",
-            docker_default_bridge_connection=False,
+        net.deploy(
+            subnet_configs=[
+                SubnetConfig(label="1", subnet=str(ipv4_subnet), gateway=gateway)
+            ]
         )
 
-        net_config = NetConfig(internal=False, ipv4=False, ipv6=True)
-
-        node = deployer.put_node_config(name="node", config=node_config)
-        net = deployer.put_network_config(name="net", config=net_config)
-
-        hosts_iter = ipv6_subnet.hosts()
-        gateway = str(next(hosts_iter))
-        requested_ip = None
-        for _ in range(10):
-            requested_ip = str(next(hosts_iter))
-
-        node.deploy()
-        net.deploy(ip=str(ipv6_subnet), gateway=gateway)
-
         node.start()
-        net.connect_node(node=node, ipv6_addr=requested_ip)
+        net.connect(node=node, subnet_label=net.subnets()[0].label, addr=static_ip)
 
-        assigned_ip = net.get_node_network_ip(node=node, ipv6=True)
-        assert assigned_ip == requested_ip
+        assigned_ip = net.get_node_connection_info(node=node).addr
+        assert assigned_ip == static_ip
 
-        node.stop(0)
-        deployer.clear_infrastructure()
-
-    def test_NET_9__two_nodes_with_static_ipv4_no_conflict_and_can_communicate(
+    def test_NET_7__two_nodes_with_static_ipv4_no_conflict_and_can_communicate(
         self, deployer: DockerDeployer, ipv4_subnet: ipaddress.IPv4Network
     ):
         node_config = NodeConfig(
@@ -1230,41 +1217,42 @@ class TestDockerDeployerIntegration:
             os="alpine",
             docker_default_bridge_connection=False,
         )
-        net_config = NetConfig(internal=False, ipv4=True, ipv6=False)
+        net_config = NetConfig(internal=False)
 
         a = deployer.put_node_config(name="node_a", config=node_config)
         b = deployer.put_node_config(name="node_b", config=node_config)
         net = deployer.put_network_config(name="net", config=net_config)
 
-        hosts_iter = ipv4_subnet.hosts()
+        hosts = ipv4_subnet.hosts()
+        gateway = next(hosts)
+        a_ip = next(hosts)
+        b_ip = next(hosts)
 
-        gateway = str(next(hosts_iter))
-        hosts = list(ipv4_subnet.hosts())
-        ip_a, ip_b = str(hosts[30]), str(hosts[40])
+        for _ in range(15):
+            b_ip = next(hosts)
 
         a.deploy()
         b.deploy()
-        net.deploy(ip=str(ipv4_subnet), gateway=gateway)
+        net.deploy(
+            subnet_configs=[
+                SubnetConfig(label="1", subnet=ipv4_subnet, gateway=gateway)
+            ]
+        )
 
         a.start()
         b.start()
 
-        net.connect_node(node=a, ipv4_addr=ip_a)
-        net.connect_node(node=b, ipv4_addr=ip_b)
+        net.connect(node=a, subnet_label=net.subnets()[0].label, addr=a_ip)
+        net.connect(node=b, subnet_label=net.subnets()[0].label, addr=b_ip)
 
-        assert net.get_node_network_ip(node=a) == ip_a
-        assert net.get_node_network_ip(node=b) == ip_b
-        assert ip_a != ip_b
+        assert net.get_node_connection_info(node=a).addr == a_ip
+        assert net.get_node_connection_info(node=b).addr == b_ip
 
-        ping_a_to_b = a.exec(f"ping -c 1 {ip_b}")
-        ping_b_to_a = b.exec(f"ping -c 1 {ip_a}")
+        ping_a_to_b = a.exec(f"ping -c 1 {b_ip}")
+        ping_b_to_a = b.exec(f"ping -c 1 {a_ip}")
 
         assert self.__check_exit_code(ping_a_to_b, 0, True)
         assert self.__check_exit_code(ping_b_to_a, 0, True)
-
-        a.stop(0)
-        b.stop(0)
-        deployer.clear_infrastructure()
 
     # ----- ДОПОЛНИТЕЛЬНЫЙ ТЕСТ ДЛЯ СНЭПШОТОВ
 
@@ -1341,7 +1329,7 @@ class TestDockerDeployerIntegration:
             os.remove(tar_path)
 
     def test_SNAPSHOT_5__three_node_network_with_volumes_and_snapshot_of_dev_toolchain(
-        self, deployer: DockerDeployer
+        self, deployer: DockerDeployer, ipv4_subnet: ipaddress.IPv4Network
     ):
         light_node_config = NodeConfig(
             cpu_limit=1,
@@ -1355,7 +1343,7 @@ class TestDockerDeployerIntegration:
             os="ubuntu:latest",
             docker_default_bridge_connection=False,
         )
-        net_config = NetConfig(internal=False, ipv4=True, ipv6=False)
+        net_config = NetConfig(internal=False)
 
         node_a = deployer.put_node_config(name="node_a", config=light_node_config)
         node_b = deployer.put_node_config(name="node_b", config=light_node_config)
@@ -1371,7 +1359,13 @@ class TestDockerDeployerIntegration:
         POSTGRES_SRC_MOUNT = "/usr/src/postgres"
 
         volume.deploy()
-        net.deploy()
+        net.deploy(
+            subnet_configs=[
+                SubnetConfig(
+                    label="1", subnet=ipv4_subnet, gateway=next(ipv4_subnet.hosts())
+                )
+            ]
+        )
 
         node_a.deploy(
             mount_configs=[
@@ -1403,9 +1397,9 @@ class TestDockerDeployerIntegration:
         node_b.start()
         database.start()
 
-        net.connect_node(node=node_a)
-        net.connect_node(node=node_b)
-        net.connect_node(node=database)
+        net.connect(node=node_a, subnet_label=net.subnets()[0].label)
+        net.connect(node=node_b, subnet_label=net.subnets()[0].label)
+        net.connect(node=database, subnet_label=net.subnets()[0].label)
 
         database.exec(
             command=f"sh -c 'apt-get update && apt-get install -y iputils-ping'"

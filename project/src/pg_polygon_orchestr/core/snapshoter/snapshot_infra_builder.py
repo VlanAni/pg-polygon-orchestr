@@ -18,6 +18,7 @@ from ..abstract import Deployer
 from ..exception import common_exceptions, docker_exceptions
 from ..docker import DockerDeployer, docker_node, docker_volume, docker_network
 from ..configs import VolumeConfig, NetConfig, NodeConfig
+from ..meta import SubnetConfig
 
 
 class SnapshotInfraBuilder:
@@ -593,35 +594,51 @@ class SnapshotInfraBuilder:
 
         if state == EntityState.DEPLOYED.name:
             try:
-                subnet = net_data["network-ip"]
-                gateway = net_data["gateway-ip"]
+                subnets_data = net_data["subnets_data"]
+
+                subnet_configs: list[SubnetConfig] = []
+
+                for label, ip_data in subnets_data.items():
+                    config_values = ip_data
+                    config_values["label"] = label
+
+                    subnet_configs.append(
+                        SubnetConfig(
+                            **{
+                                field: config_values[field]
+                                for field in inspect.signature(
+                                    SubnetConfig
+                                ).parameters.keys()
+                            },
+                        )
+                    )
             except:
                 raise docker_exceptions.FailedToBuildDockerNetwork(
-                    f"failed to get subnet and gateway ip addresses"
+                    f"failed to get subnets configs"
                 )
 
             try:
-                net.deploy(ip=subnet, gateway=gateway)
+                net.deploy(subnet_configs=subnet_configs)
             except Exception as err:
                 raise docker_exceptions.FailedToBuildDockerNetwork(
                     f"failed to deploy the network {net.inf_name()}"
                 ) from err
 
             try:
-                connected_nodes = net_data["connected_nodes"]
+                conn_node_map = net_data["conn_node_map"]
             except Exception as err:
                 raise docker_exceptions.FailedToBuildDockerNetwork(
                     f"failed to get 'connected_nodes' param"
                 ) from err
 
             try:
-                for node_id, ip_addr in connected_nodes.items():
+                for node_id, conn_info in conn_node_map.items():
                     node = node_id_map[typing.cast(str, node_id)]
 
-                    ipv4 = ip_addr["ipv4"] if nc.ipv4 else ""
-                    ipv6 = ip_addr["ipv6"] if nc.ipv6 else ""
-
-                    net.connect_node(node=node, ipv4_addr=ipv4, ipv6_addr=ipv6)
+                    net.connect(
+                        node=node,
+                        **{field: conn_info[field] for field in conn_info.keys()},
+                    )
             except Exception as err:
                 raise docker_exceptions.FailedToBuildDockerNetwork(
                     f"failed to connect nodes to the network {net.inf_name()}"

@@ -1,25 +1,30 @@
 from abc import abstractmethod
+import ipaddress
 
 from .entity import Entity
 from .node import Node
+from ..meta import ConnectionInfo, SubnetInfo
 
 
 class Network(Entity):
 
     @abstractmethod
-    def get_network_ip(self, ipv6: bool = False) -> str:
+    def subnets(self) -> list[SubnetInfo]:
         pass
 
     @abstractmethod
-    def connect_node(
-        self, node: Node, ipv4_addr: str | None = None, ipv6_addr: str | None = None
+    def connect(
+        self,
+        node: Node,
+        subnet_label: str,
+        addr: ipaddress.IPv4Address | None = None,
     ) -> None:
         pass
 
     @abstractmethod
-    def disconnect_node(self, node: Node) -> None:
+    def disconnect(self, node: Node) -> None:
         pass
 
     @abstractmethod
-    def get_node_network_ip(self, node: Node, ipv6: bool = False) -> str:
+    def get_node_connection_info(self, node: Node) -> ConnectionInfo:
         pass

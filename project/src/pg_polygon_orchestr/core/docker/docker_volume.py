@@ -72,7 +72,7 @@ class DockerVolume(Volume):
     def get_id(self) -> uuid.UUID:
         return self.__uuid
 
-    def transform_to_mapping(self) -> Mapping[str, Any]:
+    def serialize(self) -> Mapping[str, Any]:
         return {
             "type": Type.DOCKER,
             "uuid": self.__uuid,

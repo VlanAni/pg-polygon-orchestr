@@ -12,7 +12,7 @@ import typing
 from ..configs import NodeConfig
 from ..exception import docker_exceptions, common_exceptions
 from ..abstract import Node, EntityRegistry, Volume
-from . import docker_session
+from . import docker_session, docker_network
 from ..meta import MountConfig, Type, EntityState, ExecResult, MountableType
 
 
@@ -35,6 +35,7 @@ class DockerNode(Node):
         self.__uuid: uuid.UUID = uuid.uuid4() if id is None else id
         self.__mounted: dict[str, MountConfig] = dict()
         self.__shrd_volumes: EntityRegistry = shared_volume_registry
+        self.__conn_nets: list[docker_network.DockerNetwork] = []
         self.__real_name = str(self.__uuid)
 
     # ----- Интерфейсные методы
@@ -139,7 +140,7 @@ class DockerNode(Node):
     def get_id(self) -> uuid.UUID:
         return self.__uuid
 
-    def transform_to_mapping(self) -> Mapping[str, Any]:
+    def serialize(self) -> Mapping[str, Any]:
         if self.__is_state_as_required(required=EntityState.REMOVED):
             raise common_exceptions.TryToSerializeRemovedEntity(
                 f"the node {self.__inf_name} is removed"
@@ -251,6 +252,12 @@ class DockerNode(Node):
         self.__mounted.clear()
         self.__state = EntityState.NOT_DEPLOYED
 
+        for net in self.__conn_nets:
+            if self.__is_state_as_required(required=EntityState.DEPLOYED):
+                net.free_address_of_not_deployed_node(node=self)
+
+        self.__conn_nets = []
+
     def __remove(self) -> None:
         if self.__is_state_as_required(required=EntityState.DEPLOYED):
             try:
@@ -272,6 +279,12 @@ class DockerNode(Node):
         self.__config = None
         self.__mounted.clear()
         self.__state = EntityState.REMOVED
+
+        for net in self.__conn_nets:
+            if self.__is_state_as_required(required=EntityState.DEPLOYED):
+                net.free_address_of_not_deployed_node(node=self)
+
+        self.__conn_nets = []
 
     def __start(self) -> None:
         try:
@@ -352,12 +365,8 @@ class DockerNode(Node):
 
     # ------ докер-специфичные функции (пользователю они не нужны)
 
-    def share_container_id(self) -> str | None:
-        if self.__dcont is None:
-            return None
-
-        self.__dcont.reload()
-        return self.__dcont.id
+    def docker_container_id(self) -> str:
+        return self.__dcont.id  # type: ignore
 
     def docker_commit(self, pause: bool = True) -> tuple[dockerapi_images.Image, str]:
         if self.__is_state_as_required(required=EntityState.REMOVED):
@@ -397,6 +406,9 @@ class DockerNode(Node):
 
         self.__dimg = image
         self.__ditag = image_tag
+
+    def push_connected_network(self, network: docker_network.DockerNetwork) -> None:
+        self.__conn_nets.append(network)
 
     # ------ приватные проверки
 
