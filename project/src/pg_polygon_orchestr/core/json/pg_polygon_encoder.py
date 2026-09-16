@@ -8,7 +8,7 @@ import ipaddress
 from ..serializable import Serializable
 
 
-class CustomEncoder(JSONEncoder):
+class PgPolygonEncoder(JSONEncoder):
     def default(self, o: typing.Any) -> typing.Any:
         if isinstance(o, Serializable):
             return o.serialize()

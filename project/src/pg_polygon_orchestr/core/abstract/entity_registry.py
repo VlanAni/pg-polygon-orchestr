@@ -12,8 +12,8 @@ class EntityRegistry:
         self.__uuid_map: dict[uuid.UUID, Entity] = dict()
 
     def put_object_in_registry(self, deployer: Deployer, entity: Entity) -> bool:
-        input_entity_name = entity.inf_name()
-        input_entity_uuid = entity.get_id()
+        input_entity_name = entity.inf_name
+        input_entity_uuid = entity.uuid
 
         if self.__uuid_map.get(input_entity_uuid, None) is not None:
             return False
@@ -27,8 +27,8 @@ class EntityRegistry:
         return True
 
     def pop_object_from_registry(self, deployer: Deployer, entity: Entity) -> None:
-        input_entity_name = entity.inf_name()
-        input_entity_uuid = entity.get_id()
+        input_entity_name = entity.inf_name
+        input_entity_uuid = entity.uuid
 
         try:
             self.__name_map.pop(input_entity_name)

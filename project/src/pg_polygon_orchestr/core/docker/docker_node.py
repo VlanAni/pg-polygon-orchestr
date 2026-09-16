@@ -131,13 +131,16 @@ class DockerNode(Node):
 
         self.__remove()
 
-    def get_type(self) -> Type:
+    @property
+    def type(self) -> Type:
         return Type.DOCKER
 
+    @property
     def inf_name(self) -> str:
         return self.__inf_name
 
-    def get_id(self) -> uuid.UUID:
+    @property
+    def uuid(self) -> uuid.UUID:
         return self.__uuid
 
     def serialize(self) -> Mapping[str, Any]:
@@ -155,9 +158,11 @@ class DockerNode(Node):
             "config": self.__config,
         }
 
+    @property
     def real_name(self) -> str:
         return self.__real_name
 
+    @property
     def state(self) -> EntityState:
         return self.__state
 
@@ -185,34 +190,34 @@ class DockerNode(Node):
             for mnt_cfg in mount_configs:
                 mnted = mnt_cfg.mounted
 
-                if mnted.mtype() == MountableType.HOSTPATH:
+                if mnted.mtype == MountableType.HOSTPATH:
 
-                    if not os.path.exists(path=mnted.source()):
+                    if not os.path.exists(path=mnted.source):
                         self.__mounted.clear()
                         docker_exceptions.DockerDeployError(
-                            f"the path {mnted.source()} does not exists"
+                            f"the path {mnted.source} does not exists"
                         )
 
-                elif mnted.mtype() == MountableType.VOLUME:
+                elif mnted.mtype == MountableType.VOLUME:
                     mnted = typing.cast(Volume, mnted)
 
-                    if mnted.get_type() != Type.DOCKER:
+                    if mnted.type != Type.DOCKER:
                         self.__mounted.clear()
                         docker_exceptions.DockerDeployError(f"not a docker volume")
 
-                    if mnted.state() != EntityState.DEPLOYED:
+                    if mnted.state != EntityState.DEPLOYED:
                         self.__mounted.clear()
                         docker_exceptions.DockerDeployError(f"not deployed volume")
 
                     search_result = self.__shrd_volumes.get_entity_by_id(
-                        uuid=mnted.get_id()
+                        uuid=mnted.uuid
                     )
 
                     if search_result is None:
                         self.__mounted.clear()
                         docker_exceptions.DockerDeployError(f"unknown docker volume")
 
-                src = mnted.source()
+                src = mnted.source
                 self.__mounted[src] = mnt_cfg
 
             container = self.__clsession.ask_to_create_a_container(  # type: ignore

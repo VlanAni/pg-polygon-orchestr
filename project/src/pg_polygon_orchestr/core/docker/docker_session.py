@@ -194,17 +194,17 @@ class DockerClientSession:
         mount_list: list[dockerapi_types.Mount] = list()
 
         for mntcfg in mount_configs:
-            source = mntcfg.mounted.source()
+            source = mntcfg.mounted.source
             mount_path = mntcfg.mount_path
             ro = mntcfg.read_only
 
-            if mntcfg.mounted.mtype() == MountableType.VOLUME:
+            if mntcfg.mounted.mtype == MountableType.VOLUME:
                 mount_list.append(
                     dockerapi_types.Mount(
                         target=mount_path, source=source, type="volume", read_only=ro
                     )
                 )
-            elif mntcfg.mounted.mtype() == MountableType.HOSTPATH:
+            elif mntcfg.mounted.mtype == MountableType.HOSTPATH:
                 mount_list.append(
                     dockerapi_types.Mount(
                         target=mount_path, source=source, type="bind", read_only=ro

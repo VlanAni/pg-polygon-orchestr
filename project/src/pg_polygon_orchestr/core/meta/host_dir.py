@@ -11,8 +11,10 @@ class HostPathDesc(Mountable):
     def __init__(self, path: str):
         self.__path = path
 
+    @property
     def source(self) -> str:
         return self.__path
 
+    @property
     def mtype(self) -> MountableType:
         return MountableType.HOSTPATH

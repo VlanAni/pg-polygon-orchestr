@@ -6,5 +6,6 @@ from ..meta import Mountable, MountableType
 
 class Volume(Entity, Mountable):
 
+    @property
     def mtype(self) -> MountableType:
         return MountableType.VOLUME

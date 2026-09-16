@@ -9,10 +9,12 @@ class MountableType(Enum):
 
 class Mountable(ABC):
 
+    @property
     @abstractmethod
     def source(self) -> str:
         pass
 
+    @property
     @abstractmethod
     def mtype(self) -> MountableType:
         pass

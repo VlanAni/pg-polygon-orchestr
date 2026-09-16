@@ -457,7 +457,7 @@ class SnapshotInfraBuilder:
                     image_tar_fo.close()
 
                 try:
-                    docker_tag_result = loaded_image.tag(repository=f"{str(node.get_id())}", tag="v0")  # type: ignore
+                    docker_tag_result = loaded_image.tag(repository=f"{str(node.uuid)}", tag="v0")  # type: ignore
 
                     if not (docker_tag_result):
                         raise Exception
@@ -467,7 +467,7 @@ class SnapshotInfraBuilder:
                         f"failed to tag the image"
                     ) from err
 
-                new_tag = f"{str(node.get_id())}:v0"
+                new_tag = f"{str(node.uuid)}:v0"
 
                 try:
                     client.images.remove(image=f"snapshot_{id}:v0")  # type: ignore
@@ -526,7 +526,7 @@ class SnapshotInfraBuilder:
                 node.deploy(mount_configs=mount_configs)
             except Exception as err:
                 raise docker_exceptions.FailedToBuildDockerNode(
-                    f"failed to deploy node {node.inf_name()}"
+                    f"failed to deploy node {node.inf_name}"
                 ) from err
 
         return node
@@ -616,7 +616,7 @@ class SnapshotInfraBuilder:
                 net.deploy(subnet_configs=subnet_configs)
             except Exception as err:
                 raise docker_exceptions.FailedToBuildDockerNetwork(
-                    f"failed to deploy the network {net.inf_name()}"
+                    f"failed to deploy the network {net.inf_name}"
                 ) from err
 
             try:
@@ -636,5 +636,5 @@ class SnapshotInfraBuilder:
                     )
             except Exception as err:
                 raise docker_exceptions.FailedToBuildDockerNetwork(
-                    f"failed to connect nodes to the network {net.inf_name()}"
+                    f"failed to connect nodes to the network {net.inf_name}"
                 )
