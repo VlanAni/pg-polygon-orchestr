@@ -1,19 +1,19 @@
 # abstract class for deploying nodes using its config
 
-from abc import ABC, abstractmethod
+from abc import abstractmethod
 from typing import Mapping
-import uuid
 
 from .node import Node
 from .volume import Volume
 from .network import Network
+from .infra_object import InfraObject
 
 from ..configs import NetConfig, NodeConfig, VolumeConfig
 from ..meta import SnapshotDescription
 from ..serializable import Serializable
 
 
-class Deployer(Serializable, ABC):
+class Deployer(Serializable, InfraObject):
     """Интерфейс `Deployer`
 
     Предоставляет методы для управления инфраструктурой
@@ -81,8 +81,9 @@ class Deployer(Serializable, ABC):
 
     # ----- ГЕТТЕРЫ
 
+    @property
     @abstractmethod
-    def get_nodes(self) -> Mapping[str, Node]:
+    def nodes(self) -> Mapping[str, Node]:
         """Вернуть все узлы инфраструктуры
 
         Returns:
@@ -90,8 +91,9 @@ class Deployer(Serializable, ABC):
         """
         pass
 
+    @property
     @abstractmethod
-    def get_volumes(self) -> Mapping[str, Volume]:
+    def volumes(self) -> Mapping[str, Volume]:
         """Вернуть все Volume инфраструктуры
 
         Returns:
@@ -99,21 +101,13 @@ class Deployer(Serializable, ABC):
         """
         pass
 
+    @property
     @abstractmethod
-    def get_network(self) -> Mapping[str, Network]:
+    def network(self) -> Mapping[str, Network]:
         """Вернуть все сети инфраструктуры
 
         Returns:
             Mapping[str, Network]: `read_only` копия словаря, где ключ - `uuid` сети, а значение - `Network` сети
-        """
-        pass
-
-    @abstractmethod
-    def get_id(self) -> uuid.UUID:
-        """Уникальнй идентификатор инфраструктуры из 128 бит
-
-        Returns:
-            uuid.UUID: `uuid` инфраструктуры
         """
         pass
 

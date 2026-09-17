@@ -7,7 +7,7 @@ import json
 import io
 
 from ..exception import common_exceptions
-from ..json import CustomEncoder
+from ..json import PgPolygonEncoder
 
 
 class SnapshotArchiveBuilder:
@@ -46,7 +46,7 @@ class SnapshotArchiveBuilder:
 
         try:
             json_dump = json.dumps(
-                obj=obj, cls=CustomEncoder, indent=4, ensure_ascii=False
+                obj=obj, cls=PgPolygonEncoder, indent=4, ensure_ascii=False
             ).encode("utf-8")
         except Exception as err:
             raise common_exceptions.MakeSnapshotError(

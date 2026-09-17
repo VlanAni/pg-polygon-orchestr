@@ -1,1 +1,1 @@
-from .custom_encoder import CustomEncoder
+from .pg_polygon_encoder import PgPolygonEncoder

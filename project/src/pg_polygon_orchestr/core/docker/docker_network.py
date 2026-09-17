@@ -40,13 +40,16 @@ class DockerNetwork(Network):
 
     # ------ интерфейсные методы
 
+    @property
     def inf_name(self) -> str:
         return self.__inf_name
 
-    def get_type(self) -> Type:
+    @property
+    def type(self) -> Type:
         return Type.DOCKER
 
-    def get_id(self) -> uuid.UUID:
+    @property
+    def uuid(self) -> uuid.UUID:
         return self.__uuid
 
     def deploy(self, **options: list[SubnetConfig]) -> None:
@@ -167,16 +170,18 @@ class DockerNetwork(Network):
                 f"cannot serialize the network {self.__inf_name}"
             ) from err
 
+    @property
     def real_name(self) -> str:
         return self.__real_name
 
+    @property
     def state(self) -> EntityState:
         return self.__state
 
     # ------ функции для управления внутренней работы с docker
 
     def free_address_of_not_deployed_node(self, node: docker_node.DockerNode):
-        conn_info = self.__connd_node_map.get(node.get_id(), None)
+        conn_info = self.__connd_node_map.get(node.uuid, None)
 
         if conn_info is None:
             return
@@ -245,26 +250,26 @@ class DockerNetwork(Network):
         subnet_label: str,
         addr: str | ipaddress.IPv4Address | None = None,
     ) -> None:
-        if node.get_type() is Type.DOCKER:
+        if node.type is Type.DOCKER:
             d_node = typing.cast(docker_node.DockerNode, val=node)
         else:
             raise docker_exceptions.ConnectToDockerNetError(
-                f"the node {node.inf_name()} is not a docker node"
+                f"the node {node.inf_name} is not a docker node"
             )
 
-        if self.__shared_nodes.get_entity_by_id(uuid=d_node.get_id()) is None:
+        if self.__shared_nodes.get_entity_by_id(uuid=d_node.uuid) is None:
             raise docker_exceptions.ConnectToDockerNetError(
-                f"the node {d_node.inf_name()} with id {d_node.get_id()} is not known"
+                f"the node {d_node.inf_name} with id {d_node.uuid} is not known"
             )
 
-        if self.__connd_node_map.get(d_node.get_id(), None) is not None:
+        if self.__connd_node_map.get(d_node.uuid, None) is not None:
             raise docker_exceptions.ConnectToDockerNetError(
-                f"the node {d_node.inf_name()} with id {d_node.get_id()} is already connected"
+                f"the node {d_node.inf_name} with id {d_node.uuid} is already connected"
             )
 
-        if node.state() != EntityState.DEPLOYED:
+        if node.state != EntityState.DEPLOYED:
             raise docker_exceptions.ConnectToDockerNetError(
-                f"the node {d_node.inf_name()} with id {d_node.get_id()} is not deployed"
+                f"the node {d_node.inf_name} with id {d_node.uuid} is not deployed"
             )
 
         subnet_desc = self.__subnts_reg.get(subnet_label, None)  # type: ignore
@@ -302,39 +307,39 @@ class DockerNetwork(Network):
             subnet_desc.free_address(addr=allocated_addr)
 
             raise docker_exceptions.ConnectToDockerNetError(
-                f"failed to connect the container {d_node.inf_name()} to the network {self.__inf_name}"
+                f"failed to connect the container {d_node.inf_name} to the network {self.__inf_name}"
             ) from err
 
-        self.__connd_node_map[d_node.get_id()] = ConnectionInfo(
+        self.__connd_node_map[d_node.uuid] = ConnectionInfo(
             subnet_label=subnet_label, addr=allocated_addr
         )
 
         d_node.push_connected_network(network=self)
 
     def __disconnect_node(self, node: Node) -> None:
-        if node.get_type() is Type.DOCKER:
+        if node.type is Type.DOCKER:
             d_node = typing.cast(docker_node.DockerNode, val=node)
         else:
             raise docker_exceptions.DisconnectFromDockerNetError(
-                f"the node {node.inf_name()} is not a docker node"
+                f"the node {node.inf_name} is not a docker node"
             )
 
-        if self.__shared_nodes.get_entity_by_id(d_node.get_id()) is None:
+        if self.__shared_nodes.get_entity_by_id(d_node.uuid) is None:
             raise docker_exceptions.DisconnectFromDockerNetError(
-                f"the node {d_node.inf_name()} with id {d_node.get_id()} is not known"
+                f"the node {d_node.inf_name} with id {d_node.uuid} is not known"
             )
 
-        if node.state() != EntityState.DEPLOYED:
-            self.__connd_node_map.pop(d_node.get_id())
+        if node.state != EntityState.DEPLOYED:
+            self.__connd_node_map.pop(d_node.uuid)
             raise docker_exceptions.DisconnectFromDockerNetError(
-                f"the node {d_node.inf_name()} with id {d_node.get_id()} is not deployed"
+                f"the node {d_node.inf_name} with id {d_node.uuid} is not deployed"
             )
 
-        conn_info = self.__connd_node_map.get(d_node.get_id(), None)
+        conn_info = self.__connd_node_map.get(d_node.uuid, None)
 
         if conn_info is None:
             raise docker_exceptions.DisconnectFromDockerNetError(
-                f"the node {d_node.inf_name()} with id {d_node.get_id()} is already disconnected"
+                f"the node {d_node.inf_name} with id {d_node.uuid} is already disconnected"
             )
 
         container_id = d_node.docker_container_id()
@@ -343,30 +348,30 @@ class DockerNetwork(Network):
             self.__dnet.disconnect(container=container_id)  # type: ignore
         except docker.errors.APIError as err:
             raise docker_exceptions.DisconnectFromDockerNetError(
-                f"failed to disconnect the container {d_node.inf_name()} from the network {self.__inf_name}"
+                f"failed to disconnect the container {d_node.inf_name} from the network {self.__inf_name}"
             ) from err
 
         self.__subnts_reg[conn_info.subnet_label].free_address(addr=conn_info.addr)  # type: ignore
-        self.__connd_node_map.pop(d_node.get_id())
+        self.__connd_node_map.pop(d_node.uuid)
 
     def __get_node_connection_info(self, node: Node) -> ConnectionInfo:
-        if node.get_type() is Type.DOCKER:
+        if node.type is Type.DOCKER:
             d_node = typing.cast(docker_node.DockerNode, val=node)
         else:
             raise docker_exceptions.GetContainerIpError(
-                f"the node {node.inf_name()} is not a docker node"
+                f"the node {node.inf_name} is not a docker node"
             )
 
-        if self.__shared_nodes.get_entity_by_id(uuid=d_node.get_id()) is None:
+        if self.__shared_nodes.get_entity_by_id(uuid=d_node.uuid) is None:
             raise docker_exceptions.GetContainerIpError(
-                f"the node {d_node.inf_name()} with id {d_node.get_id} is not known"
+                f"the node {d_node.inf_name} with id {d_node.uuid} is not known"
             )
 
-        conn_info = self.__connd_node_map.get(node.get_id(), None)
+        conn_info = self.__connd_node_map.get(node.uuid, None)
 
         if conn_info is None:
             raise docker_exceptions.GetContainerIpError(
-                f"the node {d_node.inf_name()} is not connected"
+                f"the node {d_node.inf_name} is not connected"
             )
 
         return conn_info

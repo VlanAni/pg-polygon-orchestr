@@ -28,7 +28,7 @@ class MountConfig(Serializable):
             f_value = getattr(self, f_name)
 
             if isinstance(f_value, Mountable):
-                result[f_name] = {"type": f_value.mtype(), "source": f_value.source()}
+                result[f_name] = {"type": f_value.mtype, "source": f_value.source}
             else:
                 result[f_name] = f_value
 

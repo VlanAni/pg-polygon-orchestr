@@ -1,4 +1,10 @@
-from .core.configs import NetConfig, NodeConfig, VolumeConfig, DockerNodeOptions
+from .core.configs import (
+    NetConfig,
+    NodeConfig,
+    VolumeConfig,
+    DockerNodeOptions,
+    DeviceRateLimit,
+)
 
 from .core.docker import DockerDeployer
 

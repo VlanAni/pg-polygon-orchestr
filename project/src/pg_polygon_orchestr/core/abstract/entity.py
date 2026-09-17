@@ -1,11 +1,12 @@
-from abc import ABC, abstractmethod
-from uuid import UUID
+from abc import abstractmethod
+
+from .infra_object import InfraObject
 
 from ..meta import Type, EntityState, MountConfig, SubnetConfig
 from ..serializable import Serializable
 
 
-class Entity(Serializable, ABC):
+class Entity(Serializable, InfraObject):
     """Базовый класс для Volume, Node и Network"""
 
     @abstractmethod
@@ -20,22 +21,22 @@ class Entity(Serializable, ABC):
     def remove(self):
         pass
 
+    @property
     @abstractmethod
-    def get_type(self) -> Type:
+    def type(self) -> Type:
         pass
 
+    @property
     @abstractmethod
     def inf_name(self) -> str:
         pass
 
-    @abstractmethod
-    def get_id(self) -> UUID:
-        pass
-
+    @property
     @abstractmethod
     def real_name(self) -> str:
         pass
 
+    @property
     @abstractmethod
     def state(self) -> EntityState:
         pass

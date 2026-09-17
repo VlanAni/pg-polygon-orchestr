@@ -29,10 +29,12 @@ class DockerVolume(Volume):
 
     # ------ интерфейсные методы
 
+    @property
     def inf_name(self) -> str:
         return self.__inf_name
 
-    def get_type(self) -> Type:
+    @property
+    def type(self) -> Type:
         return Type.DOCKER
 
     def deploy(self, **options: str) -> None:
@@ -69,7 +71,8 @@ class DockerVolume(Volume):
 
         self.__remove()
 
-    def get_id(self) -> uuid.UUID:
+    @property
+    def uuid(self) -> uuid.UUID:
         return self.__uuid
 
     def serialize(self) -> Mapping[str, Any]:
@@ -81,12 +84,15 @@ class DockerVolume(Volume):
             "config": self.__config,
         }
 
+    @property
     def real_name(self) -> str:
         return self.__real_name
 
+    @property
     def state(self) -> EntityState:
         return self.__state
 
+    @property
     def source(self) -> str:
         return str(self.__uuid)
 
