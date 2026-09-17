@@ -15,14 +15,14 @@ class Network(Entity):
     @abstractmethod
     def connect(
         self,
-        node: Node,
+        node: Node | str,
         subnet_label: str,
         addr: ipaddress.IPv4Address | None = None,
     ) -> None:
         pass
 
     @abstractmethod
-    def disconnect(self, node: Node) -> None:
+    def disconnect(self, node: Node | str) -> None:
         pass
 
     @abstractmethod

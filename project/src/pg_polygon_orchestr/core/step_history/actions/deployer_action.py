@@ -1,7 +1,7 @@
-from enum import Enum
+from .action import Action
 
 
-class DeployerAction(Enum):
+class DeployerAction(Action):
     MAKE_SNAPSHOT = 1
     REMOVE_INFRASTRUCTURE = 3
     PUT_NODE_CONFIG = 4

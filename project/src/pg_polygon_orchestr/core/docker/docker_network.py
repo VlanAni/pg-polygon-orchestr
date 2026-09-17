@@ -104,7 +104,7 @@ class DockerNetwork(Network):
 
     def connect(
         self,
-        node: Node,
+        node: Node | str,
         subnet_label: str,
         addr: ipaddress.IPv4Address | None = None,
     ) -> None:
@@ -120,7 +120,7 @@ class DockerNetwork(Network):
 
         self.__connect(node=node, addr=addr, subnet_label=subnet_label)
 
-    def disconnect(self, node: Node) -> None:
+    def disconnect(self, node: Node | str) -> None:
         if self.__is_state_as_required(required=EntityState.REMOVED):
             raise common_exceptions.EntityIsRemovedException(
                 f"the network {self.__inf_name} is removed"
@@ -246,15 +246,27 @@ class DockerNetwork(Network):
 
     def __connect(
         self,
-        node: Node,
+        node: Node | str,
         subnet_label: str,
         addr: str | ipaddress.IPv4Address | None = None,
     ) -> None:
-        if node.type is Type.DOCKER:
+        if isinstance(node, str):
+            entity = self.__shared_nodes.get_entity_by_name(name=node)
+
+            if entity is None:
+                raise docker_exceptions.ConnectToDockerNetError(
+                    f"there's no node with the name [{node}]"
+                )
+
+            obj_node = typing.cast(Node, entity)
+        else:
+            obj_node = node
+
+        if obj_node.type is Type.DOCKER:
             d_node = typing.cast(docker_node.DockerNode, val=node)
         else:
             raise docker_exceptions.ConnectToDockerNetError(
-                f"the node {node.inf_name} is not a docker node"
+                f"the node {obj_node.inf_name} is not a docker node"
             )
 
         if self.__shared_nodes.get_entity_by_id(uuid=d_node.uuid) is None:
@@ -267,7 +279,7 @@ class DockerNetwork(Network):
                 f"the node {d_node.inf_name} with id {d_node.uuid} is already connected"
             )
 
-        if node.state != EntityState.DEPLOYED:
+        if obj_node.state != EntityState.DEPLOYED:
             raise docker_exceptions.ConnectToDockerNetError(
                 f"the node {d_node.inf_name} with id {d_node.uuid} is not deployed"
             )
@@ -316,12 +328,24 @@ class DockerNetwork(Network):
 
         d_node.push_connected_network(network=self)
 
-    def __disconnect_node(self, node: Node) -> None:
-        if node.type is Type.DOCKER:
+    def __disconnect_node(self, node: Node | str) -> None:
+        if isinstance(node, str):
+            entity = self.__shared_nodes.get_entity_by_name(name=node)
+
+            if entity is None:
+                raise docker_exceptions.ConnectToDockerNetError(
+                    f"there's no node with the name [{node}]"
+                )
+
+            obj_node = typing.cast(Node, entity)
+        else:
+            obj_node = node
+
+        if obj_node.type is Type.DOCKER:
             d_node = typing.cast(docker_node.DockerNode, val=node)
         else:
             raise docker_exceptions.DisconnectFromDockerNetError(
-                f"the node {node.inf_name} is not a docker node"
+                f"the node {obj_node.inf_name} is not a docker node"
             )
 
         if self.__shared_nodes.get_entity_by_id(d_node.uuid) is None:
@@ -329,7 +353,7 @@ class DockerNetwork(Network):
                 f"the node {d_node.inf_name} with id {d_node.uuid} is not known"
             )
 
-        if node.state != EntityState.DEPLOYED:
+        if obj_node.state != EntityState.DEPLOYED:
             self.__connd_node_map.pop(d_node.uuid)
             raise docker_exceptions.DisconnectFromDockerNetError(
                 f"the node {d_node.inf_name} with id {d_node.uuid} is not deployed"
