@@ -294,6 +294,3 @@ class TestDockerMount:
             "sh -c 'dd if=/dev/zero of=/app/tmpfs_data/big.bin bs=1M count=5'"
         )
         assert check_exit_code(oversized_write, 0, False)
-
-        node.stop(0)
-        deployer.clear_infrastructure()

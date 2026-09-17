@@ -1,7 +1,7 @@
-from enum import Enum
+from .action import Action
 
 
-class NetAction(Enum):
+class NetAction(Action):
     CONNECT = 0
     DISCONNET = 1
     DEPLOY = 2

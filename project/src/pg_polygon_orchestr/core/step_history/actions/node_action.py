@@ -1,7 +1,7 @@
-from enum import Enum
+from .action import Action
 
 
-class NodeAction(Enum):
+class NodeAction(Action):
     DEPLOY = 1
     REMOVE = 2
     START = 3
