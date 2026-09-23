@@ -1,11 +1,11 @@
 from dataclasses import dataclass, field, InitVar, fields
 import typing
 
-from ..serializable import Serializable
+from ..common_interfaces import Config
 
 
 @dataclass()
-class VolumeConfig(Serializable):
+class VolumeConfig(Config):
     path_on_host: str = ""
 
     # параметры для докера

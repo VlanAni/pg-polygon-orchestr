@@ -1,6 +1,5 @@
-from dataclasses import dataclass, fields
+from dataclasses import dataclass
 import ipaddress
-from typing import Any, Mapping
 
 from ..serializable import Serializable
 
@@ -9,11 +8,3 @@ from ..serializable import Serializable
 class ConnectionInfo(Serializable):
     subnet_label: str
     addr: ipaddress.IPv4Address
-
-    def serialize(self) -> Mapping[str, Any]:
-        values: dict[str, Any] = {}
-
-        for field in fields(self):
-            values[field.name] = getattr(self, field.name)
-
-        return values

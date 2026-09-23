@@ -2,10 +2,10 @@ from dataclasses import dataclass, fields
 import types
 import typing
 
-from ..serializable import Serializable
+from ..serializable import Serializable, EasyDecodable
 
 
-class DockerNodeConfigOptions(Serializable):
+class DockerNodeConfigOptions(Serializable, EasyDecodable):
 
     def __init__(
         self,
@@ -98,7 +98,7 @@ class DockerNodeConfigOptions(Serializable):
 
 
 @dataclass(frozen=True)
-class DeviceRateLimit(Serializable):
+class DeviceRateLimit(Serializable, EasyDecodable):
     device_path: str
     rate_bytes_per_sec: int
 

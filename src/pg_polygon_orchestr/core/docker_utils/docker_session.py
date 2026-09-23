@@ -169,8 +169,8 @@ class DockerClientSession:
         try:
             network = self.__session.networks.create(
                 name=name,
-                driver=config.docker_net_driver,
-                internal=config.internal,
+                driver=config.docker_net_options.driver,
+                internal=config.docker_net_options.internal,
                 ipam=ipam_config,
             )
         except docker.errors.APIError as err:

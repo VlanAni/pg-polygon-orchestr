@@ -354,16 +354,11 @@ class SnapshotInfraBuilder:
             raise docker_exceptions.FailedToBuildDockerVolume(f"failed to get a config")
 
         try:
-            vc_value = {
-                field: config[field]
-                for field in inspect.signature(VolumeConfig).parameters.keys()
-            }
+            vc = VolumeConfig.from_dict(config)
         except Exception as err:
             raise docker_exceptions.FailedToBuildDockerVolume(
                 f"incorrect config for the volume"
             )
-
-        vc = VolumeConfig(**vc_value)
 
         volume = deployer.put_volume_config(name=name, config=vc)
 
@@ -573,17 +568,11 @@ class SnapshotInfraBuilder:
             )
 
         try:
-            nc_values = {
-                field: config[field]
-                for field in inspect.signature(NetConfig).parameters.keys()
-            }
-
+            nc = NetConfig.from_dict(data=config)
         except Exception as err:
             raise docker_exceptions.FailedToBuildDockerNetwork(
                 f"incorrect network config"
             ) from err
-
-        nc = NetConfig(**nc_values)
 
         net = deployer.put_network_config(name=name, config=nc)
         net = typing.cast(DockerNetwork, net)
