@@ -5,6 +5,7 @@ from .core.docker_infra import DockerDeployer
 from .core.infra_configs import (
     DeviceRateLimit,
     DockerNodeConfigOptions,
+    DockerNetworkConfigOptions,
     NodeConfig,
     NetConfig,
     VolumeConfig,

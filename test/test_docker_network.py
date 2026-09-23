@@ -6,6 +6,7 @@ from pg_polygon_orchestr import NodeConfig
 from pg_polygon_orchestr import NetConfig
 from pg_polygon_orchestr import DockerDeployer
 from pg_polygon_orchestr import DockerNodeConfigOptions
+from pg_polygon_orchestr import DockerNetworkConfigOptions
 from pg_polygon_orchestr import common_exceptions
 from pg_polygon_orchestr import SubnetConfig
 
@@ -55,7 +56,7 @@ class TestDockerNetwork:
             node.deploy()
 
         net_config = NetConfig(
-            internal=True,
+            DockerNetworkConfigOptions(internal=True),
         )
 
         net = deployer.put_network_config(name="net", config=net_config)
@@ -111,7 +112,7 @@ class TestDockerNetwork:
         b = deployer.put_node_config(name="node_b", config=config)
         c = deployer.put_node_config(name="node_c", config=config)
 
-        net_config = NetConfig(internal=False)
+        net_config = NetConfig(DockerNetworkConfigOptions(internal=False))
 
         net = deployer.put_network_config(name="net", config=net_config)
 
@@ -167,7 +168,7 @@ class TestDockerNetwork:
         c = deployer.put_node_config(name="node_c", config=config)
         d = deployer.put_node_config(name="node_d", config=config)
 
-        net_config = NetConfig(internal=False)
+        net_config = NetConfig(DockerNetworkConfigOptions(internal=False))
 
         net1 = deployer.put_network_config(name="net1", config=net_config)
         net2 = deployer.put_network_config(name="net2", config=net_config)
@@ -267,7 +268,7 @@ class TestDockerNetwork:
             ),
         )
 
-        net_config = NetConfig(internal=False)
+        net_config = NetConfig(DockerNetworkConfigOptions(internal=False))
 
         a = deployer.put_node_config(name="node_a", config=node_config)
         b = deployer.put_node_config(name="node_b", config=node_config)
@@ -373,7 +374,7 @@ class TestDockerNetwork:
             os="alpine",
             docker_params=DockerNodeConfigOptions(detach_from_default_bridge=True),
         )
-        net_config = NetConfig(internal=False)
+        net_config = NetConfig(DockerNetworkConfigOptions(internal=False))
 
         a = deployer.put_node_config(name="node_a", config=node_config)
         net = deployer.put_network_config(name="net", config=net_config)
@@ -411,7 +412,7 @@ class TestDockerNetwork:
             os="alpine",
             docker_params=DockerNodeConfigOptions(detach_from_default_bridge=True),
         )
-        net_config = NetConfig(internal=True)
+        net_config = NetConfig(DockerNetworkConfigOptions(internal=True))
 
         node = deployer.put_node_config(name="node", config=node_config)
         net = deployer.put_network_config(name="net", config=net_config)
@@ -445,7 +446,7 @@ class TestDockerNetwork:
             os="alpine",
             docker_params=DockerNodeConfigOptions(detach_from_default_bridge=True),
         )
-        net_config = NetConfig(internal=False)
+        net_config = NetConfig(DockerNetworkConfigOptions(internal=False))
 
         a = deployer.put_node_config(name="node_a", config=node_config)
         b = deployer.put_node_config(name="node_b", config=node_config)

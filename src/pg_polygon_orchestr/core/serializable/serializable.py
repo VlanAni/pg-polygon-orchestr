@@ -1,10 +1,11 @@
-from abc import ABC, abstractmethod
+from abc import ABC
+
+from dataclasses import fields
 
 import typing
 
 
 class Serializable(ABC):
 
-    @abstractmethod
     def serialize(self) -> typing.Mapping[str, typing.Any]:
-        pass
+        return {field.name: getattr(self, field.name) for field in fields(self)}  # type: ignore

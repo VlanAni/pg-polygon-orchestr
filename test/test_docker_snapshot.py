@@ -16,6 +16,7 @@ from pg_polygon_orchestr import SnapshotInfraBuilder
 from pg_polygon_orchestr import find_snap_desc
 from pg_polygon_orchestr import HostPathDesc
 from pg_polygon_orchestr import DockerNodeConfigOptions
+from pg_polygon_orchestr import DockerNetworkConfigOptions
 
 from .fixtures import check_exit_code
 from .fixtures import deployer
@@ -51,7 +52,7 @@ class TestDockerSnapshot:
     ):
         node_config = NodeConfig(os="alpine", cpu_limit=1, mem_limit="256m")
 
-        net_config = NetConfig(internal=False)
+        net_config = NetConfig(DockerNetworkConfigOptions(internal=False))
 
         volume_config = VolumeConfig(docker_volume_driver="local")
 
@@ -109,7 +110,7 @@ class TestDockerSnapshot:
         self, deployer: DockerDeployer, ipv4_subnet: ipaddress.IPv4Network
     ):
         node_config = NodeConfig(os="alpine", cpu_limit=1, mem_limit="256m")
-        net_config = NetConfig(internal=False)
+        net_config = NetConfig(DockerNetworkConfigOptions(internal=False))
         volume_config = VolumeConfig(docker_volume_driver="local")
 
         snapshot_dir = os.path.join(
@@ -168,7 +169,7 @@ class TestDockerSnapshot:
         self, deployer: DockerDeployer, ipv4_subnet: ipaddress.IPv4Network
     ):
         node_config = NodeConfig(os="alpine", cpu_limit=1, mem_limit="256m")
-        net_config = NetConfig(internal=False)
+        net_config = NetConfig(DockerNetworkConfigOptions(internal=False))
         volume_config = VolumeConfig(docker_volume_driver="local")
 
         node_a = deployer.put_node_config("node_a", config=node_config)
@@ -334,7 +335,7 @@ class TestDockerSnapshot:
             os="ubuntu:latest",
             docker_params=DockerNodeConfigOptions(detach_from_default_bridge=True),
         )
-        net_config = NetConfig(internal=False)
+        net_config = NetConfig(DockerNetworkConfigOptions(internal=False))
 
         node_a = deployer.put_node_config(name="node_a", config=light_node_config)
         node_b = deployer.put_node_config(name="node_b", config=light_node_config)

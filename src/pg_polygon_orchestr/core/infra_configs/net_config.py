@@ -1,21 +1,14 @@
 from dataclasses import dataclass, fields
 import typing
 
-from ..serializable import Serializable
+from .docker_network_spec_options import DockerNetworkConfigOptions
+from ..common_interfaces import Config
 
 
 @dataclass(frozen=True)
-class NetConfig(Serializable):
-    """Класс для конфигурации сети
+class NetConfig(Config):
 
-    `internal`: `bool` (если `True` - узлы в сети не могут обращаться к внешним ресурсам)\n
-    `docker_net_driver`: `str` (указывает драйвер сети, который будет использован для создания сети Docker (по умолчанию "bridge"))\n
-
-    Класс **иммутабельный**
-    """
-
-    internal: bool
-    docker_net_driver: str = "bridge"
+    docker_net_options: DockerNetworkConfigOptions = DockerNetworkConfigOptions()
 
     def serialize(self) -> typing.Mapping[str, typing.Any]:
         result: dict[str, typing.Any] = dict()
@@ -27,3 +20,11 @@ class NetConfig(Serializable):
             result[f_name] = f_value
 
         return result
+
+    @classmethod
+    def from_dict(cls, data: typing.Mapping[str, typing.Any]) -> typing.Self:
+        docker_node_options = DockerNetworkConfigOptions.from_dict(
+            data=data["docker_net_options"]
+        )
+
+        return cls(docker_net_options=docker_node_options)

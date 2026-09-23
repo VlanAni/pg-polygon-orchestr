@@ -1,19 +1,16 @@
-from dataclasses import dataclass, fields
+from dataclasses import dataclass
 import typing
 
-from ..serializable import Serializable
+from ..common_interfaces import Config
 from .docker_node_spec_options import DockerNodeConfigOptions
 
 
 @dataclass
-class NodeConfig(Serializable):
+class NodeConfig(Config):
     os: str
     cpu_limit: int
     mem_limit: str
     docker_params: DockerNodeConfigOptions = DockerNodeConfigOptions()
-
-    def serialize(self) -> typing.Mapping[str, typing.Any]:
-        return {field.name: getattr(self, field.name) for field in fields(self)}
 
     @classmethod
     def from_dict(cls, data: typing.Mapping[str, typing.Any]) -> NodeConfig:
