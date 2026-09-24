@@ -90,8 +90,8 @@ class TestDockerDeployerIntegration:
             docker_params=fast_options,
         )
 
-        slow_node = deployer.put_node_config(name="node_slow_disk", config=slow_config)
-        fast_node = deployer.put_node_config(name="node_fast_disk", config=fast_config)
+        slow_node = deployer.node_from_config(name="node_slow_disk", config=slow_config)
+        fast_node = deployer.node_from_config(name="node_fast_disk", config=fast_config)
 
         slow_node.deploy()
         fast_node.deploy()
@@ -147,7 +147,7 @@ class TestDockerDeployerIntegration:
             docker_params=DockerNodeConfigOptions(environment=env),
         )
 
-        node = deployer.put_node_config(name="node", config=config)
+        node = deployer.node_from_config(name="node", config=config)
 
         node.deploy()
         node.start()

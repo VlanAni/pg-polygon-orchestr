@@ -38,8 +38,8 @@ class TestDockerNode:
             os="alpine:latest",
         )
 
-        node_a = deployer.put_node_config(name="node_a", config=config1)
-        node_b = deployer.put_node_config(name="node_b", config=config1)
+        node_a = deployer.node_from_config(name="node_a", config=config1)
+        node_b = deployer.node_from_config(name="node_b", config=config1)
 
         assert node_a is not None
         assert node_b is not None
@@ -76,7 +76,7 @@ class TestDockerNode:
         finally:
             client.close()
 
-        deployer.remove_infrastructure()
+        deployer.destroy_infra()
 
         with pytest.raises(common_exceptions.EntityIsRemovedException):
             node_a.start()
@@ -107,10 +107,10 @@ class TestDockerNode:
             os="ubuntu:latest",
         )
 
-        node_a = deployer.put_node_config(name="node_a", config=config1)
-        node_b = deployer.put_node_config(name="node_b", config=config1)
-        node_c = deployer.put_node_config(name="node_c", config=config2)
-        node_d = deployer.put_node_config(name="node_d", config=config2)
+        node_a = deployer.node_from_config(name="node_a", config=config1)
+        node_b = deployer.node_from_config(name="node_b", config=config1)
+        node_c = deployer.node_from_config(name="node_c", config=config2)
+        node_d = deployer.node_from_config(name="node_d", config=config2)
 
         for node in [node_a, node_b, node_c, node_d]:
             node.deploy()
@@ -141,7 +141,7 @@ class TestDockerNode:
         for node in [node_a, node_b, node_c, node_d]:
             node.stop(1)
 
-        deployer.remove_infrastructure()
+        deployer.destroy_infra()
 
         client = docker.from_env()
 
@@ -169,7 +169,7 @@ class TestDockerNode:
             os="debian",
         )
 
-        node = deployer.put_node_config(name="node", config=config)
+        node = deployer.node_from_config(name="node", config=config)
         assert node
 
         node.deploy()
@@ -189,18 +189,18 @@ class TestDockerNode:
             checker.close()
 
         node.stop(0)
-        node.clear()
+        node.undeploy()
 
         node.update(new_config=new_config)
 
-        deployer.remove_infrastructure()
+        deployer.destroy_infra()
 
         print(deployer.nodes)
 
         with pytest.raises(common_exceptions.EntityIsRemovedException):
             node.update(new_config=new_config)
 
-        node = deployer.put_node_config(name="node", config=config)
+        node = deployer.node_from_config(name="node", config=config)
         print(node.state.name)
         node.update(new_config=new_config)
 
@@ -225,7 +225,7 @@ class TestDockerNode:
             os="alpine",
         )
 
-        node = deployer.put_node_config(name="node", config=config)
+        node = deployer.node_from_config(name="node", config=config)
 
         with pytest.raises(common_exceptions.EntityIsNotDeployed):
             node.exec('echo "hello"')
@@ -256,13 +256,10 @@ class TestDockerNode:
         assert "hello" in result.stdout and not (result.stderr)
         assert result.execution_time > 0
 
-        node.stop(0)
-        deployer.clear_infrastructure()
-
         with pytest.raises(common_exceptions.EntityIsNotDeployed):
             node.exec('echo "hello"')
 
-        deployer.remove_infrastructure()
+        deployer.destroy_infra()
 
         with pytest.raises(common_exceptions.EntityIsRemovedException):
             node.exec('echo "hello"')

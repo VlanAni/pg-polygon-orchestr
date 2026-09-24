@@ -47,8 +47,8 @@ class TestDockerNetwork:
             docker_params=DockerNodeConfigOptions(detach_from_default_bridge=True),
         )
 
-        a = deployer.put_node_config(name="node_a", config=config)
-        b = deployer.put_node_config(name="node_b", config=config)
+        a = deployer.node_from_config(name="node_a", config=config)
+        b = deployer.node_from_config(name="node_b", config=config)
 
         assert a and b
 
@@ -59,7 +59,7 @@ class TestDockerNetwork:
             DockerNetworkConfigOptions(internal=True),
         )
 
-        net = deployer.put_network_config(name="net", config=net_config)
+        net = deployer.network_from_config(name="net", config=net_config)
 
         with pytest.raises(common_exceptions.EntityIsNotDeployed):
             net.connect(node=a, subnet_label="placeholder")
@@ -108,13 +108,13 @@ class TestDockerNetwork:
             docker_params=DockerNodeConfigOptions(detach_from_default_bridge=True),
         )
 
-        a = deployer.put_node_config(name="node_a", config=config)
-        b = deployer.put_node_config(name="node_b", config=config)
-        c = deployer.put_node_config(name="node_c", config=config)
+        a = deployer.node_from_config(name="node_a", config=config)
+        b = deployer.node_from_config(name="node_b", config=config)
+        c = deployer.node_from_config(name="node_c", config=config)
 
         net_config = NetConfig(DockerNetworkConfigOptions(internal=False))
 
-        net = deployer.put_network_config(name="net", config=net_config)
+        net = deployer.network_from_config(name="net", config=net_config)
 
         for node in [a, b, c]:
             node.deploy()
@@ -163,17 +163,17 @@ class TestDockerNetwork:
             ),
         )
 
-        a = deployer.put_node_config(name="node_a", config=config)
-        b = deployer.put_node_config(name="node_b", config=config)
-        c = deployer.put_node_config(name="node_c", config=config)
-        d = deployer.put_node_config(name="node_d", config=config)
+        a = deployer.node_from_config(name="node_a", config=config)
+        b = deployer.node_from_config(name="node_b", config=config)
+        c = deployer.node_from_config(name="node_c", config=config)
+        d = deployer.node_from_config(name="node_d", config=config)
 
         net_config = NetConfig(DockerNetworkConfigOptions(internal=False))
 
-        net1 = deployer.put_network_config(name="net1", config=net_config)
-        net2 = deployer.put_network_config(name="net2", config=net_config)
-        net3 = deployer.put_network_config(name="net3", config=net_config)
-        net4 = deployer.put_network_config(name="net4", config=net_config)
+        net1 = deployer.network_from_config(name="net1", config=net_config)
+        net2 = deployer.network_from_config(name="net2", config=net_config)
+        net3 = deployer.network_from_config(name="net3", config=net_config)
+        net4 = deployer.network_from_config(name="net4", config=net_config)
 
         subnets = generate_private_subnets(count=4)
         gateways = [next(subnet.hosts()) for subnet in subnets]
@@ -270,17 +270,17 @@ class TestDockerNetwork:
 
         net_config = NetConfig(DockerNetworkConfigOptions(internal=False))
 
-        a = deployer.put_node_config(name="node_a", config=node_config)
-        b = deployer.put_node_config(name="node_b", config=node_config)
-        c = deployer.put_node_config(name="node_c", config=node_config)
-        d = deployer.put_node_config(name="node_d", config=node_config)
-        switch = deployer.put_node_config(name="switch", config=switch_config)
+        a = deployer.node_from_config(name="node_a", config=node_config)
+        b = deployer.node_from_config(name="node_b", config=node_config)
+        c = deployer.node_from_config(name="node_c", config=node_config)
+        d = deployer.node_from_config(name="node_d", config=node_config)
+        switch = deployer.node_from_config(name="switch", config=switch_config)
 
         for node in [a, b, c, d, switch]:
             node.deploy()
 
-        net1 = deployer.put_network_config(name="net_1", config=net_config)
-        net2 = deployer.put_network_config(name="net_2", config=net_config)
+        net1 = deployer.network_from_config(name="net_1", config=net_config)
+        net2 = deployer.network_from_config(name="net_2", config=net_config)
 
         subnets = generate_private_subnets(count=2)
         gateways = [next(subnet.hosts()) for subnet in subnets]
@@ -376,8 +376,8 @@ class TestDockerNetwork:
         )
         net_config = NetConfig(DockerNetworkConfigOptions(internal=False))
 
-        a = deployer.put_node_config(name="node_a", config=node_config)
-        net = deployer.put_network_config(name="net", config=net_config)
+        a = deployer.node_from_config(name="node_a", config=node_config)
+        net = deployer.network_from_config(name="net", config=net_config)
 
         a.deploy()
         a.start()
@@ -414,8 +414,8 @@ class TestDockerNetwork:
         )
         net_config = NetConfig(DockerNetworkConfigOptions(internal=True))
 
-        node = deployer.put_node_config(name="node", config=node_config)
-        net = deployer.put_network_config(name="net", config=net_config)
+        node = deployer.node_from_config(name="node", config=node_config)
+        net = deployer.network_from_config(name="net", config=net_config)
 
         hosts = ipv4_subnet.hosts()
         gateway = next(hosts)
@@ -448,9 +448,9 @@ class TestDockerNetwork:
         )
         net_config = NetConfig(DockerNetworkConfigOptions(internal=False))
 
-        a = deployer.put_node_config(name="node_a", config=node_config)
-        b = deployer.put_node_config(name="node_b", config=node_config)
-        net = deployer.put_network_config(name="net", config=net_config)
+        a = deployer.node_from_config(name="node_a", config=node_config)
+        b = deployer.node_from_config(name="node_b", config=node_config)
+        net = deployer.network_from_config(name="net", config=net_config)
 
         hosts = ipv4_subnet.hosts()
         gateway = next(hosts)

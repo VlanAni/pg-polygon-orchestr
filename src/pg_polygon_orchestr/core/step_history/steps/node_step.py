@@ -5,7 +5,7 @@ from ..infra_object_type import InfraObjectType
 
 from .step import Step
 from ..actions.node_action import NodeAction
-from ...common_types import MountConfig
+from ...common_types import BindMountConfig
 from ...configs import NodeConfig
 from ..actions.action import Action
 
@@ -16,7 +16,7 @@ class NodeStep(Step):
         self,
         node_name: str,
         action: NodeAction,
-        mount_configs: list[MountConfig] = [],
+        mount_configs: list[BindMountConfig] = [],
         command: str = "",
         timeout: int | None = None,
         new_config: NodeConfig | None = None,

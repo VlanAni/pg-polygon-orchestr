@@ -38,7 +38,6 @@ class DockerNetwork(Network):
         self.__shared_nodes: EntityRegistry = shared_node_registry
         self.__connd_node_map: dict[uuid.UUID, ConnectionInfo] = dict()
         self.__subnts_reg: dict[str, SubnetDesc] | None = None
-        self.__real_name = str(self.__uuid)
 
     # ------ интерфейсные методы
 
@@ -67,7 +66,7 @@ class DockerNetwork(Network):
 
         self.__deploy(options=options)
 
-    def clear(self) -> None:
+    def undeploy(self) -> None:
         if self.__is_state_as_required(required=EntityState.REMOVED):
             raise common_exceptions.EntityIsRemovedException(
                 f"the network {self.__inf_name} is removed"
@@ -174,7 +173,7 @@ class DockerNetwork(Network):
 
     @property
     def real_name(self) -> str:
-        return self.__real_name
+        return str(self.__uuid)
 
     @property
     def state(self) -> EntityState:
@@ -182,7 +181,7 @@ class DockerNetwork(Network):
 
     # ------ функции для управления внутренней работы с docker
 
-    def free_address_of_not_deployed_node(self, node: docker_node.DockerNode):
+    def _free_address_of_not_deployed_node(self, node: docker_node.DockerNode):
         conn_info = self.__connd_node_map.get(node.uuid, None)
 
         if conn_info is None:
@@ -310,7 +309,9 @@ class DockerNetwork(Network):
                 f"failed to allocate an IP address in the subnet {subnet_label}"
             ) from err
 
-        container_id = d_node.docker_container_id()
+        container_id = (
+            d_node._docker_container_id()  # pyright: ignore[reportPrivateUsage]
+        )
 
         try:
             if allocated_addr.version == 4:
@@ -328,7 +329,9 @@ class DockerNetwork(Network):
             subnet_label=subnet_label, addr=allocated_addr
         )
 
-        d_node.push_connected_network(network=self)
+        d_node._push_connected_network(  # pyright: ignore[reportPrivateUsage]
+            network=self
+        )
 
     def __disconnect_node(self, node: Node | str) -> None:
         if isinstance(node, str):
@@ -368,7 +371,9 @@ class DockerNetwork(Network):
                 f"the node {d_node.inf_name} with id {d_node.uuid} is already disconnected"
             )
 
-        container_id = d_node.docker_container_id()
+        container_id = (
+            d_node._docker_container_id()  # pyright: ignore[reportPrivateUsage]
+        )
 
         try:
             self.__dnet.disconnect(container=container_id)  # type: ignore

@@ -5,18 +5,20 @@ import tarfile
 import uuid
 import pytest
 import docker
+import typing
 
 from pg_polygon_orchestr import DockerDeployer
 from pg_polygon_orchestr import NodeConfig
 from pg_polygon_orchestr import NetConfig
-from pg_polygon_orchestr import VolumeConfig
-from pg_polygon_orchestr import MountConfig
+from pg_polygon_orchestr import BindMountConfig
 from pg_polygon_orchestr import SubnetConfig
 from pg_polygon_orchestr import SnapshotInfraBuilder
 from pg_polygon_orchestr import find_snap_desc
-from pg_polygon_orchestr import HostPathDesc
 from pg_polygon_orchestr import DockerNodeConfigOptions
 from pg_polygon_orchestr import DockerNetworkConfigOptions
+from pg_polygon_orchestr import VolumeMountConfig
+from pg_polygon_orchestr import BindMount
+from pg_polygon_orchestr import DockerBindMountOpts
 
 from .fixtures import check_exit_code
 from .fixtures import deployer
@@ -54,11 +56,9 @@ class TestDockerSnapshot:
 
         net_config = NetConfig(DockerNetworkConfigOptions(internal=False))
 
-        volume_config = VolumeConfig(docker_volume_driver="local")
-
-        node = deployer.put_node_config("node_a", config=node_config)
-        net = deployer.put_network_config("net", config=net_config)
-        vol = deployer.put_volume_config("vol", config=volume_config)
+        node = deployer.node_from_config("node_a", config=node_config)
+        net = deployer.network_from_config("net", config=net_config)
+        vol = deployer.add_docker_volume("vol")
 
         gateway = next(ipv4_subnet.hosts())
 
@@ -69,11 +69,11 @@ class TestDockerSnapshot:
         )
         vol.deploy()
         node.deploy(
-            mount_configs=[
-                MountConfig(
-                    mounted=vol,
-                    mount_path="/app/data",
-                    read_only=False,
+            volume_mount_configs=[
+                VolumeMountConfig(
+                    volume=vol,
+                    dst="/app/data",
+                    ro=False,
                 )
             ]
         )
@@ -111,17 +111,16 @@ class TestDockerSnapshot:
     ):
         node_config = NodeConfig(os="alpine", cpu_limit=1, mem_limit="256m")
         net_config = NetConfig(DockerNetworkConfigOptions(internal=False))
-        volume_config = VolumeConfig(docker_volume_driver="local")
 
         snapshot_dir = os.path.join(
             pathlib.Path.home(), ".pg-polygon-orchestr", "snapshots"
         )
 
-        node_a = deployer.put_node_config("node_a", config=node_config)
-        node_b = deployer.put_node_config("node_b", config=node_config)
-        node_c = deployer.put_node_config("node_c", config=node_config)
-        net = deployer.put_network_config("net", config=net_config)
-        vol = deployer.put_volume_config("vol", config=volume_config)
+        node_a = deployer.node_from_config("node_a", config=node_config)
+        node_b = deployer.node_from_config("node_b", config=node_config)
+        node_c = deployer.node_from_config("node_c", config=node_config)
+        net = deployer.network_from_config("net", config=net_config)
+        vol = deployer.add_docker_volume("vol")
 
         a_id = node_a.uuid
         b_id = node_b.uuid
@@ -170,24 +169,23 @@ class TestDockerSnapshot:
     ):
         node_config = NodeConfig(os="alpine", cpu_limit=1, mem_limit="256m")
         net_config = NetConfig(DockerNetworkConfigOptions(internal=False))
-        volume_config = VolumeConfig(docker_volume_driver="local")
 
-        node_a = deployer.put_node_config("node_a", config=node_config)
-        node_b = deployer.put_node_config("node_b", config=node_config)
-        node_c = deployer.put_node_config("node_c", config=node_config)
-        net = deployer.put_network_config("net", config=net_config)
-        vol = deployer.put_volume_config("vol", config=volume_config)
+        node_a = deployer.node_from_config("node_a", config=node_config)
+        node_b = deployer.node_from_config("node_b", config=node_config)
+        node_c = deployer.node_from_config("node_c", config=node_config)
+        net = deployer.network_from_config("net", config=net_config)
+        vol = deployer.add_docker_volume("vol")
 
         vol.deploy()
 
-        mcfg = MountConfig(
-            mounted=vol,
-            mount_path="/app/data",
-            read_only=False,
+        vmc = VolumeMountConfig(
+            volume=vol,
+            dst="/app/data",
+            ro=False,
         )
 
         for node in [node_a, node_b, node_c]:
-            node.deploy(mount_configs=[mcfg])
+            node.deploy(volume_mount_configs=[vmc])
             node.start()
 
         net.deploy(
@@ -216,12 +214,15 @@ class TestDockerSnapshot:
             assert check_exit_code(exec_result=echo, expected=0, equal=True)
 
         snap_desc = deployer.make_snapshot(snapshot_name="my_snapshot", online=True)
-        deployer.remove_infrastructure()
+        deployer.destroy_infra()
 
         loaded_deployer = SnapshotInfraBuilder().build(snapshot_desc=snap_desc)
         assert len(loaded_deployer.nodes.items()) == 3
         assert len(loaded_deployer.network.items()) == 1
-        assert len(loaded_deployer.volumes.items()) == 1
+
+        dd = typing.cast(DockerDeployer, loaded_deployer)
+
+        assert len(dd.docker_volumes.items()) == 1
 
         loaded_nodes = list(loaded_deployer.nodes.values())
 
@@ -248,19 +249,19 @@ class TestDockerSnapshot:
             assert check_exit_code(exec_result=ping_1, expected=0, equal=True)
             assert check_exit_code(exec_result=ping_2, expected=0, equal=True)
 
-        loaded_deployer.remove_infrastructure()
+        loaded_deployer.destroy_infra()
 
     def test_SNAPSHOT_4__snapshot_restore_preserves_host_mounted_directory_data(
         self, deployer: DockerDeployer, host_temp_dir: str
     ):
         node_config = NodeConfig(os="alpine", cpu_limit=1, mem_limit="256m")
-        node = deployer.put_node_config(name="node_a", config=node_config)
+        node = deployer.node_from_config(name="node_a", config=node_config)
         node.deploy(
-            mount_configs=[
-                MountConfig(
-                    mounted=HostPathDesc(path=host_temp_dir),
-                    mount_path=CONTAINER_MOUNT_DIR,
-                    read_only=False,
+            bind_mount_configs=[
+                BindMountConfig(
+                    host_mnt=BindMount(src=host_temp_dir),
+                    dst=CONTAINER_MOUNT_DIR,
+                    dock_mnt_opts=DockerBindMountOpts(ro=False),
                 )
             ]
         )
@@ -275,7 +276,7 @@ class TestDockerSnapshot:
         assert check_exit_code(exec_result=write_result, expected=0, equal=True)
 
         deployer.make_snapshot(snapshot_name="host_dir_snapshot", online=True)
-        deployer.remove_infrastructure()
+        deployer.destroy_infra()
 
         host_file_path = os.path.join(host_temp_dir, filename)
         assert os.path.exists(host_file_path)
@@ -311,7 +312,7 @@ class TestDockerSnapshot:
         with open(new_host_file_path, "r") as f:
             assert f.read() == new_content
 
-        loaded_infra.remove_infrastructure()
+        loaded_infra.destroy_infra()
 
         snapshot_dir = os.path.join(
             pathlib.Path.home(), ".pg-polygon-orchestr", "snapshots"
@@ -337,20 +338,19 @@ class TestDockerSnapshot:
         )
         net_config = NetConfig(DockerNetworkConfigOptions(internal=False))
 
-        node_a = deployer.put_node_config(name="node_a", config=light_node_config)
-        node_b = deployer.put_node_config(name="node_b", config=light_node_config)
-        database = deployer.put_node_config(name="database", config=database_config)
+        node_a = deployer.node_from_config(name="node_a", config=light_node_config)
+        node_b = deployer.node_from_config(name="node_b", config=light_node_config)
+        database = deployer.node_from_config(name="database", config=database_config)
 
-        net = deployer.put_network_config(name="net", config=net_config)
+        net = deployer.network_from_config(name="net", config=net_config)
 
-        volume = deployer.put_volume_config(
-            name="volume_a", config=VolumeConfig(docker_volume_driver="local")
-        )
+        volume = deployer.add_docker_volume(name="volume_a")
 
         VOLUME_MOUNT_PATH = "/app/data"
         POSTGRES_SRC_MOUNT = "/usr/src/postgres"
 
         volume.deploy()
+
         net.deploy(
             subnet_configs=[
                 SubnetConfig(
@@ -360,27 +360,25 @@ class TestDockerSnapshot:
         )
 
         node_a.deploy(
-            mount_configs=[
-                MountConfig(
-                    mounted=volume, mount_path=VOLUME_MOUNT_PATH, read_only=False
-                )
+            volume_mount_configs=[
+                VolumeMountConfig(volume=volume, dst=VOLUME_MOUNT_PATH, ro=False)
             ]
         )
+
         node_b.deploy(
-            mount_configs=[
-                MountConfig(
-                    mounted=volume, mount_path=VOLUME_MOUNT_PATH, read_only=False
-                )
+            volume_mount_configs=[
+                VolumeMountConfig(volume=volume, dst=VOLUME_MOUNT_PATH, ro=False)
             ]
         )
+
         database.deploy(
-            mount_configs=[
-                MountConfig(
-                    mounted=HostPathDesc(
-                        path=os.path.join(pathlib.Path.home(), "postgres")
+            bind_mount_configs=[
+                BindMountConfig(
+                    host_mnt=BindMount(
+                        src=os.path.join(pathlib.Path.home(), "postgres")
                     ),
-                    mount_path=POSTGRES_SRC_MOUNT,
-                    read_only=False,
+                    dst=POSTGRES_SRC_MOUNT,
+                    dock_mnt_opts=DockerBindMountOpts(ro=False),
                 )
             ]
         )
@@ -444,7 +442,7 @@ class TestDockerSnapshot:
         snap_desc = deployer.make_snapshot(
             snapshot_name="pg_dev_infra_snapshot", online=True
         )
-        deployer.remove_infrastructure()
+        deployer.destroy_infra()
 
         snapshot = find_snap_desc(target="pg_dev_infra_snapshot")
         assert snapshot
@@ -466,7 +464,7 @@ class TestDockerSnapshot:
         gcc_check_after = restored_database.exec("sh -c 'gcc --version'")
         assert check_exit_code(gcc_check_after, 0, True)
 
-        loaded_deployer.remove_infrastructure()
+        loaded_deployer.destroy_infra()
 
         snapshot_dir = os.path.join(
             pathlib.Path.home(), ".pg-polygon-orchestr", "snapshots"

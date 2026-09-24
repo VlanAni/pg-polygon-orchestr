@@ -1,7 +1,6 @@
 from typing import Any, Mapping
 
-from ..infra import Volume
-from ..infra_configs import VolumeConfig
+from ..common_interfaces import Entity
 from ..exception import docker_exceptions, common_exceptions
 from ..docker_utils import DockerClientSession
 
@@ -11,16 +10,14 @@ import uuid
 from ..common_types import EntityState, InfraType
 
 
-class DockerVolume(Volume):
+class DockerVolume(Entity):
     def __init__(
         self,
         name: str,
-        config: VolumeConfig,
         session: DockerClientSession,
         id: uuid.UUID | None = None,
     ) -> None:
         self.__inf_name = name
-        self.__config = config
         self.__state = EntityState.NOT_DEPLOYED
         self.__clsession = session
         self.__dvolume = None
@@ -50,7 +47,7 @@ class DockerVolume(Volume):
 
         self.__deploy()
 
-    def clear(self) -> None:
+    def undeploy(self) -> None:
         if self.__is_state_as_required(required=EntityState.REMOVED):
             raise common_exceptions.EntityIsRemovedException(
                 f"the volume {self.__inf_name} is removed"
@@ -77,11 +74,9 @@ class DockerVolume(Volume):
 
     def serialize(self) -> Mapping[str, Any]:
         return {
-            "type": InfraType.DOCKER,
             "uuid": self.__uuid,
             "name": self.__inf_name,
             "state": self.__state,
-            "config": self.__config,
         }
 
     @property
@@ -100,9 +95,7 @@ class DockerVolume(Volume):
 
     def __deploy(self) -> None:
         try:
-            volume = self.__clsession.ask_to_create_volume(  # type: ignore
-                volume_name=str(self.__uuid), volume_config=self.__config  # type: ignore
-            )
+            volume = self.__clsession.ask_to_create_volume(volume_name=str(self.__uuid))
         except docker_exceptions.ResourceCreationError as err:
             raise docker_exceptions.DockerDeployError(
                 f"failed to deploy docker volume {self.__inf_name}"
@@ -138,7 +131,6 @@ class DockerVolume(Volume):
 
         self.__state = EntityState.REMOVED
         self.__dvolume = None
-        self.__config = None
 
     # ------ приватные методы
 
