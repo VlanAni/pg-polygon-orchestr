@@ -1,20 +1,20 @@
 from abc import abstractmethod
+import typing
 
 from .infra_object import InfraObject
 
-from ..common_types import InfraType, EntityState, MountConfig, SubnetConfig
+from ..common_types import InfraType, EntityState
 from ..serializable import Serializable
 
 
 class Entity(Serializable, InfraObject):
-    """Базовый класс для Volume, Node и Network"""
 
     @abstractmethod
-    def deploy(self, **options: str | list[MountConfig] | list[SubnetConfig]):
+    def deploy(self, **options: typing.Any):
         pass
 
     @abstractmethod
-    def clear(self):
+    def undeploy(self):
         pass
 
     @abstractmethod

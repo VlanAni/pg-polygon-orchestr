@@ -5,10 +5,11 @@ import docker.models.networks as dockerapi_networks
 import docker.models.volumes as dockerapi_volumes
 import docker.errors
 import docker.types as dockerapi_types
+
 from pathlib import Path
 
-from ..infra_configs import NodeConfig, NetConfig, VolumeConfig
-from ..common_types import MountConfig, MountableType, SubnetConfig
+from ..infra_configs import NodeConfig, NetConfig
+from ..common_types import SubnetConfig
 from ..exception import docker_exceptions
 
 
@@ -25,9 +26,20 @@ class DockerClientSession:
         image_tag: str,
     ) -> dockerapi_images.Image:
         if self.__session is None:
-            self.__session = docker.from_env()
+            try:
+                self.__open_docker_session()
+            except Exception as err:
+                raise docker_exceptions.ResourceCreationError(
+                    f"failed to open docker session"
+                )
 
         try:
+
+            if self.__session is None:
+                raise docker_exceptions.ResourceCreationError(
+                    f"there are no a Docker Client Session"
+                )
+
             image = self.__session.images.build(
                 path=str(Path(__file__).parent),
                 buildargs={"OS_IMAGE": config.os},
@@ -35,18 +47,22 @@ class DockerClientSession:
                 rm=True,
                 forcerm=True,
             )[0]
+
         except docker.errors.BuildError as err:
-            raise docker_exceptions.ImageBuildError(
+
+            raise docker_exceptions.ResourceCreationError(
                 f"cannot build an image {image_tag} from the Dockerfile"
             ) from err
 
         except docker.errors.APIError as err:
-            raise docker_exceptions.ImageBuildError(
+
+            raise docker_exceptions.ResourceCreationError(
                 f"server returns an error: {err}"
             ) from err
 
         except docker.errors.DockerException as err:
-            raise docker_exceptions.ImageBuildError(
+
+            raise docker_exceptions.ResourceCreationError(
                 f"unpredictable error: {err}"
             ) from err
 
@@ -57,12 +73,23 @@ class DockerClientSession:
         image: dockerapi_images.Image,
         name: str,
         config: NodeConfig,
-        mount_configs: list[MountConfig],
+        mounts: list[dockerapi_types.Mount],
     ) -> dockerapi_containers.Container:
         if self.__session is None:
-            self.__session = docker.from_env()
+            try:
+                self.__open_docker_session()
+            except Exception as err:
+                raise docker_exceptions.ResourceCreationError(
+                    f"failed to open a Docker Client Session"
+                )
 
         try:
+
+            if self.__session is None:
+                raise docker_exceptions.ResourceCreationError(
+                    f"failed to fetch a Docker Client Session"
+                )
+
             container = self.__session.containers.create(
                 image=image,
                 cpu_period=100000,
@@ -70,32 +97,42 @@ class DockerClientSession:
                 mem_limit=config.mem_limit,
                 detach=True,
                 name=name,
-                mounts=self.__make_mount_list(mount_configs=mount_configs),
+                mounts=mounts,
                 **config.docker_params.to_host_config_kwargs(),
             )
+
         except docker.errors.ImageNotFound as err:
+
             raise docker_exceptions.ResourceCreationError(
                 f"the image {image} not found"
             ) from err
 
         except docker.errors.APIError as err:
+
             raise docker_exceptions.ResourceCreationError(
                 f"server returns an error"
             ) from err
 
         if config.docker_params.detach_from_default_bridge:
             try:
+
                 container.start()
+
             except docker.errors.APIError as err:
+
                 container.remove(force=True)
+
                 raise docker_exceptions.ResourceCreationError(
                     f"failed to start container to disconnect from default bridge"
                 ) from err
 
             if self.__default_bridge is None:
                 try:
-                    networks = self.__session.networks.list(names=["bridge"])  # type: ignore
+
+                    networks = self.__session.networks.list(names=["bridge"])  # type: ignore # тип опции `names` - list[str]
+
                 except docker.errors.APIError as err:
+
                     container.remove(force=True)
                     raise docker_exceptions.ResourceCreationError(
                         f"cannot get the default bridge"
@@ -110,17 +147,24 @@ class DockerClientSession:
                 self.__default_bridge = networks[0]
 
             try:
+
                 self.__default_bridge.disconnect(container=container)
+
             except docker.errors.APIError as err:
+
                 container.remove(force=True)
                 raise docker_exceptions.ResourceCreationError(
                     f"failed to disconnect container from the default bridge"
                 ) from err
 
             try:
+
                 container.stop(timeout=0)
+
             except docker.errors.APIError as err:
+
                 container.remove(force=True)
+
                 raise docker_exceptions.ResourceCreationError(
                     f"failed to disconnect container from the default bridge"
                 ) from err
@@ -129,7 +173,7 @@ class DockerClientSession:
 
     def ask_to_delete_image(self, image: str, force: bool = False) -> None:
         if self.__session is None:
-            self.__session = docker.from_env()
+            self.__open_docker_session()
 
         try:
             self.__session.images.remove(image=image, force=force)  # type: ignore
@@ -141,15 +185,26 @@ class DockerClientSession:
     def ask_to_create_volume(
         self,
         volume_name: str,
-        volume_config: VolumeConfig,
     ) -> dockerapi_volumes.Volume | None:
         if self.__session is None:
-            self.__session = docker.from_env()
+            try:
+                self.__open_docker_session()
+            except Exception as err:
+                raise docker_exceptions.ResourceCreationError(
+                    f"failed to open a Docker Client Session"
+                )
 
         try:
-            config = volume_config
-            volume = self.__session.volumes.create(name=volume_name, driver=config.docker_volume_driver, driver_opts=config.docker_driver_options)  # type: ignore
+
+            if self.__session is None:
+                raise docker_exceptions.ResourceCreationError(
+                    f"the Docker Client Session is None"
+                )
+
+            volume = self.__session.volumes.create(name=volume_name)
+
             return volume
+
         except docker.errors.APIError as err:
             raise docker_exceptions.ResourceCreationError(
                 f"failed to create the volume {volume_name}"
@@ -162,18 +217,31 @@ class DockerClientSession:
         subnet_configs: list[SubnetConfig],
     ) -> dockerapi_networks.Network:
         if self.__session is None:
-            self.__session = docker.from_env()
+            try:
+                self.__open_docker_session()
+            except Exception as err:
+                raise docker_exceptions.ResourceCreationError(
+                    f"failed to open a Docker Client Session"
+                )
 
         ipam_config = self.__make_docker_ipam_config(subnet_configs=subnet_configs)
 
         try:
+
+            if self.__session is None:
+                raise docker_exceptions.ResourceCreationError(
+                    f"the Docker Client Session is None"
+                )
+
             network = self.__session.networks.create(
                 name=name,
                 driver=config.docker_net_options.driver,
                 internal=config.docker_net_options.internal,
                 ipam=ipam_config,
             )
+
         except docker.errors.APIError as err:
+
             raise docker_exceptions.ResourceCreationError(
                 f"cannot create the network {name}"
             ) from err
@@ -188,30 +256,19 @@ class DockerClientSession:
 
     # ------ приватные методы
 
-    def __make_mount_list(
-        self, mount_configs: list[MountConfig]
-    ) -> list[dockerapi_types.Mount]:
-        mount_list: list[dockerapi_types.Mount] = list()
+    def __open_docker_session(self):
+        try:
+            self.__session = docker.from_env()
+        except:
+            raise Exception(f"failed to open client session")
 
-        for mntcfg in mount_configs:
-            source = mntcfg.mounted.source
-            mount_path = mntcfg.mount_path
-            ro = mntcfg.read_only
-
-            if mntcfg.mounted.mtype == MountableType.VOLUME:
-                mount_list.append(
-                    dockerapi_types.Mount(
-                        target=mount_path, source=source, type="volume", read_only=ro
-                    )
-                )
-            elif mntcfg.mounted.mtype == MountableType.HOSTPATH:
-                mount_list.append(
-                    dockerapi_types.Mount(
-                        target=mount_path, source=source, type="bind", read_only=ro
-                    )
-                )
-
-        return mount_list
+        try:
+            if not self.__session.ping():  # type: ignore
+                self.__session = None
+                raise Exception(f"Docker Daemon hasn't sent response")
+        except docker.errors.APIError as err:
+            self.__session = None
+            raise Exception(f"failed to check connection") from err
 
     def __make_docker_ipam_config(
         self, subnet_configs: list[SubnetConfig]

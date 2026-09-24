@@ -4,11 +4,9 @@ from abc import abstractmethod
 from typing import Mapping
 
 from .node import Node
-from .volume import Volume
 from .network import Network
 from ..common_interfaces import InfraObject
-
-from ..infra_configs import NetConfig, NodeConfig, VolumeConfig
+from ..infra_configs import NetConfig, NodeConfig
 from ..common_types import SnapshotDescription
 from ..serializable import Serializable
 
@@ -20,18 +18,8 @@ class Deployer(Serializable, InfraObject):
 
     """
 
-    # ----- ДЕПЛОИНГ ИНФРАСТРУКТУРЫ
-
     @abstractmethod
-    def clear_infrastructure(self) -> None:
-        """Выполнить `clear()` для всех элементов инфраструктуры
-        Raises:
-            common_exception.ClearError: не получилось выполнить `deploy()` для всех элементов
-        """
-        pass
-
-    @abstractmethod
-    def remove_infrastructure(self) -> None:
+    def destroy_infra(self) -> None:
         """Выполнить `remove()` для всех элементов инфраструктуры
         Raises:
             common_exception.RemoveError: не получилось выполнить `deploy()` для всех элементов
@@ -41,7 +29,7 @@ class Deployer(Serializable, InfraObject):
     # ----- КОНФИГУРАЦИЯ
 
     @abstractmethod
-    def put_node_config(self, name: str, config: NodeConfig) -> Node:
+    def node_from_config(self, name: str, config: NodeConfig) -> Node:
         """Зарегистрировать конфиг узла `config` на имя узла `name`
 
         Args:
@@ -54,20 +42,7 @@ class Deployer(Serializable, InfraObject):
         pass
 
     @abstractmethod
-    def put_volume_config(self, name: str, config: VolumeConfig) -> Volume:
-        """Зарегистрировать конфиг `config` на имя Volume'а `name`
-
-        Args:
-            `name` (`str`): имя для Volume в инфраструктуре (будет соответствовать возвращаемому значению `volume.inf_name()`)
-            `config` (`VolumeConfig`): конфигурация этого Volume
-
-        Returns:
-            `Volume`: если `Volume` с таким именем уже был сконфигурирован - вернётся ранее сконфигурированый `Volume`, иначе - новый сконфигурированный `Volume` с конфигом `config`
-        """
-        pass
-
-    @abstractmethod
-    def put_network_config(self, name: str, config: NetConfig) -> Network:
+    def network_from_config(self, name: str, config: NetConfig) -> Network:
         """Зарегистрировать конфиг `config` на имя сети `name`
 
         Args:
@@ -88,16 +63,6 @@ class Deployer(Serializable, InfraObject):
 
         Returns:
             Mapping[str, Node]: `read_only` копия словаря, где ключ - `uuid` узла, а значение - `Node`
-        """
-        pass
-
-    @property
-    @abstractmethod
-    def volumes(self) -> Mapping[str, Volume]:
-        """Вернуть все Volume инфраструктуры
-
-        Returns:
-            Mapping[str, Volume]: `read_only` копия словаря, где ключ - `uuid` Volume, а значение - `Volume`
         """
         pass
 

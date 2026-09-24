@@ -4,10 +4,10 @@ import docker
 
 from pg_polygon_orchestr import DockerDeployer
 from pg_polygon_orchestr import NodeConfig
-from pg_polygon_orchestr import VolumeConfig
-from pg_polygon_orchestr import HostPathDesc
-from pg_polygon_orchestr import MountConfig
-from pg_polygon_orchestr import docker_exceptions
+from pg_polygon_orchestr import BindMountConfig
+from pg_polygon_orchestr import BindMount
+from pg_polygon_orchestr import VolumeMountConfig
+from pg_polygon_orchestr import DockerBindMountOpts
 
 from .fixtures import check_exit_code
 from .fixtures import deployer
@@ -42,20 +42,17 @@ class TestDockerMount:
 
     def test_MOUNT_1__volume_mount_persistency(self, deployer: DockerDeployer):
         node_config = NodeConfig(cpu_limit=1, mem_limit="512m", os="ubuntu:latest")
-        node = deployer.put_node_config(name="node", config=node_config)
+        node = deployer.node_from_config(name="node", config=node_config)
 
-        volume_conf = VolumeConfig(
-            docker_volume_driver="local",
-        )
-        volume = deployer.put_volume_config(name="test_volume", config=volume_conf)
+        volume = deployer.add_docker_volume(name="test_volume")
 
         volume.deploy()
         node.deploy(
-            mount_configs=[
-                MountConfig(
-                    mounted=volume,
-                    mount_path="/app/mounted_data",
-                    read_only=False,
+            volume_mount_configs=[
+                VolumeMountConfig(
+                    volume=volume,
+                    dst="/app/mounted_data",
+                    ro=False,
                 )
             ]
         )
@@ -72,24 +69,19 @@ class TestDockerMount:
         assert check_exit_code(result, 0, True)
         assert "test" in result.stdout  # type: ignore
 
-        node.stop(0)
-
-        deployer.clear_infrastructure()
-
     def test_MOUNT_2__read_only_volume(self, deployer: DockerDeployer):
         node_config = NodeConfig(cpu_limit=1, mem_limit="512m", os="ubuntu:latest")
-        node = deployer.put_node_config(name="node", config=node_config)
+        node = deployer.node_from_config(name="node", config=node_config)
 
-        volume_conf = VolumeConfig(docker_volume_driver="local")
-        volume = deployer.put_volume_config(name="test_volume", config=volume_conf)
+        volume = deployer.add_docker_volume(name="test_volume")
 
         volume.deploy()
         node.deploy(
-            mount_configs=[
-                MountConfig(
-                    mounted=volume,
-                    mount_path="/app/mounted_data",
-                    read_only=True,
+            volume_mount_configs=[
+                VolumeMountConfig(
+                    volume=volume,
+                    dst="/app/mounted_data",
+                    ro=True,
                 )
             ]
         )
@@ -99,25 +91,21 @@ class TestDockerMount:
         result = node.exec("sh -c 'echo test > /app/mounted_data/file.txt'")
         assert check_exit_code(result, 0, False)
 
-        node.stop(0)
-        deployer.clear_infrastructure()
-        deployer.remove_infrastructure()
-
     def test_MOUNT_3__mount_directory_write_from_container_visible_on_host(
         self, deployer: DockerDeployer, host_temp_dir: str
     ):
         config = NodeConfig(os="alpine", cpu_limit=1, mem_limit="256m")
-        node = deployer.put_node_config(name="test_node", config=config)
+        node = deployer.node_from_config(name="test_node", config=config)
 
         filename = "from_container.txt"
         content = "written inside container"
 
         node.deploy(
-            mount_configs=[
-                MountConfig(
-                    mounted=HostPathDesc(path=host_temp_dir),
-                    mount_path=CONTAINER_MOUNT_DIR,
-                    read_only=False,
+            bind_mount_configs=[
+                BindMountConfig(
+                    host_mnt=BindMount(src=host_temp_dir),
+                    dst=CONTAINER_MOUNT_DIR,
+                    docker_mount_options=DockerBindMountOpts(ro=False),
                 )
             ]
         )
@@ -152,13 +140,13 @@ class TestDockerMount:
 
         config = NodeConfig(os="alpine", cpu_limit=1, mem_limit="256m")
 
-        node = deployer.put_node_config(name="test_node", config=config)
+        node = deployer.node_from_config(name="test_node", config=config)
         node.deploy(
-            mount_configs=[
-                MountConfig(
-                    mounted=HostPathDesc(path=host_temp_dir),
-                    mount_path=CONTAINER_MOUNT_DIR,
-                    read_only=False,
+            bind_mount_configs=[
+                BindMountConfig(
+                    host_mnt=BindMount(src=host_temp_dir),
+                    dst=CONTAINER_MOUNT_DIR,
+                    docker_mount_options=DockerBindMountOpts(ro=False),
                 )
             ]
         )
@@ -176,13 +164,13 @@ class TestDockerMount:
         host_file_path, expected_content = host_temp_file
 
         config = NodeConfig(os="alpine", cpu_limit=1, mem_limit="256m")
-        node = deployer.put_node_config(name="test_node", config=config)
+        node = deployer.node_from_config(name="test_node", config=config)
         node.deploy(
-            mount_configs=[
-                MountConfig(
-                    mounted=HostPathDesc(path=host_file_path),
-                    mount_path=CONTAINER_MOUNT_FILE,
-                    read_only=False,
+            bind_mount_configs=[
+                BindMountConfig(
+                    host_mnt=BindMount(src=host_file_path),
+                    dst=CONTAINER_MOUNT_FILE,
+                    docker_mount_options=DockerBindMountOpts(ro=False),
                 )
             ]
         )
@@ -198,42 +186,31 @@ class TestDockerMount:
             assert f.read() == expected_content
 
     def test_MOUNT_6__mount_nonexistent_directory_raises(
-        self, deployer: DockerDeployer, nonexistent_host_path: str
+        self, nonexistent_host_path: str
     ):
-        config = NodeConfig(os="alpine", cpu_limit=1, mem_limit="256m")
-        node = deployer.put_node_config(name="test_node", config=config)
-        with pytest.raises(docker_exceptions.DockerDeployError):
-            node.deploy(
-                mount_configs=[
-                    MountConfig(
-                        mounted=HostPathDesc(path=nonexistent_host_path),
-                        mount_path=CONTAINER_MOUNT_DIR,
-                        read_only=False,
-                    )
-                ]
-            )
+        with pytest.raises(KeyError):
+            BindMount(src=nonexistent_host_path)
 
         assert not os.path.exists(nonexistent_host_path)
 
     def test_MOUNT_7__volume_shared_between_two_nodes(self, deployer: DockerDeployer):
         node_config = NodeConfig(cpu_limit=1, mem_limit="256m", os="alpine")
 
-        node_a = deployer.put_node_config(name="node_a", config=node_config)
-        node_b = deployer.put_node_config(name="node_b", config=node_config)
+        node_a = deployer.node_from_config(name="node_a", config=node_config)
+        node_b = deployer.node_from_config(name="node_b", config=node_config)
 
-        volume_conf = VolumeConfig(docker_volume_driver="local")
-        volume = deployer.put_volume_config(name="shared_volume", config=volume_conf)
+        volume = deployer.add_docker_volume(name="shared_volume")
 
         volume.deploy()
 
-        mnt_config = MountConfig(
-            mounted=volume,
-            mount_path="/shared",
-            read_only=False,
+        vmc = VolumeMountConfig(
+            volume=volume,
+            dst="/shared",
+            ro=False,
         )
 
         for node in [node_a, node_b]:
-            node.deploy(mount_configs=[mnt_config])
+            node.deploy(volume_mount_configs=[vmc])
             node.start()
 
         write_result = node_a.exec("sh -c 'echo from_node_a > /shared/shared.txt'")
@@ -252,45 +229,3 @@ class TestDockerMount:
         assert check_exit_code(reread_result, 0, True)
         assert "from_node_a" in reread_result.stdout  # type: ignore
         assert "from_node_b" in reread_result.stdout  # type: ignore
-
-        node_a.stop(0)
-        node_b.stop(0)
-        deployer.clear_infrastructure()
-
-    def test_MOUNT_8__volume_driver_opts_tmpfs_size_limit_enforced(
-        self, deployer: DockerDeployer
-    ):
-        node_config = NodeConfig(cpu_limit=1, mem_limit="512m", os="alpine")
-        node = deployer.put_node_config(name="node", config=node_config)
-
-        volume_conf = VolumeConfig(
-            docker_volume_driver="local",
-            docker_driver_opts={
-                "type": "tmpfs",
-                "device": "tmpfs",
-                "o": "size=1m",
-            },
-        )
-        volume = deployer.put_volume_config(name="tmpfs_volume", config=volume_conf)
-        volume.deploy()
-
-        node.deploy(
-            mount_configs=[
-                MountConfig(
-                    mounted=volume,
-                    mount_path="/app/tmpfs_data",
-                    read_only=False,
-                )
-            ]
-        )
-        node.start()
-
-        small_write = node.exec(
-            "sh -c 'dd if=/dev/zero of=/app/tmpfs_data/small.bin bs=1k count=100'"
-        )
-        assert check_exit_code(small_write, 0, True)
-
-        oversized_write = node.exec(
-            "sh -c 'dd if=/dev/zero of=/app/tmpfs_data/big.bin bs=1M count=5'"
-        )
-        assert check_exit_code(oversized_write, 0, False)

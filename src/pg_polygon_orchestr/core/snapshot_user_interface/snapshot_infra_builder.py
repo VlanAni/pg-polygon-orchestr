@@ -6,20 +6,19 @@ import inspect
 import docker
 import docker.errors
 
-from ..common_types import (
-    SnapshotDescription,
-    InfraType,
-    EntityState,
-    MountConfig,
-    MountableType,
-)
-
+from ..common_types import SnapshotDescription, InfraType, EntityState
 from ..exception import common_exceptions, docker_exceptions
-from ..infra_configs import VolumeConfig, NetConfig, NodeConfig
+from ..infra_configs import NetConfig, NodeConfig
 from ..common_types import SubnetConfig
-from ..mount import HostPathDesc
+from ..mount import BindMountConfig
 from ..infra import Deployer
-from ..docker_infra import DockerVolume, DockerNetwork, DockerNode, DockerDeployer
+from ..docker_infra import (
+    DockerVolume,
+    DockerNetwork,
+    DockerNode,
+    DockerDeployer,
+    VolumeMountConfig,
+)
 
 
 class SnapshotInfraBuilder:
@@ -125,7 +124,7 @@ class SnapshotInfraBuilder:
 
                 except Exception as err:
                     try:
-                        deployer.remove_infrastructure()
+                        deployer.destroy_infra()
                     except Exception:
                         raise docker_exceptions.FailedToRemoveInfrastructureAfterFailedBuild
 
@@ -134,7 +133,7 @@ class SnapshotInfraBuilder:
                     ) from err
             else:
                 try:
-                    deployer.remove_infrastructure()
+                    deployer.destroy_infra()
                 except Exception:
                     raise docker_exceptions.FailedToRemoveInfrastructureAfterFailedBuild
 
@@ -146,7 +145,7 @@ class SnapshotInfraBuilder:
                 vol_data = typing.cast(dict[str, typing.Any], json.load(vol_info))
             except Exception as err:
                 try:
-                    deployer.remove_infrastructure()
+                    deployer.destroy_infra()
                 except Exception:
                     raise docker_exceptions.FailedToRemoveInfrastructureAfterFailedBuild
 
@@ -162,7 +161,7 @@ class SnapshotInfraBuilder:
                 )
             except docker_exceptions.FailedToBuildDockerVolume as err:
                 try:
-                    deployer.remove_infrastructure()
+                    deployer.destroy_infra()
                 except Exception:
                     raise docker_exceptions.FailedToRemoveInfrastructureAfterFailedBuild
 
@@ -176,7 +175,7 @@ class SnapshotInfraBuilder:
             node_id_list = typing.cast(list[str], meta_data["nodes"])
         else:
             try:
-                deployer.remove_infrastructure()
+                deployer.destroy_infra()
             except Exception:
                 raise docker_exceptions.FailedToRemoveInfrastructureAfterFailedBuild
 
@@ -196,7 +195,7 @@ class SnapshotInfraBuilder:
 
                 except Exception as err:
                     try:
-                        deployer.remove_infrastructure()
+                        deployer.destroy_infra()
                     except Exception:
                         raise docker_exceptions.FailedToRemoveInfrastructureAfterFailedBuild
 
@@ -205,7 +204,7 @@ class SnapshotInfraBuilder:
                     ) from err
             else:
                 try:
-                    deployer.remove_infrastructure()
+                    deployer.destroy_infra()
                 except Exception:
                     raise docker_exceptions.FailedToRemoveInfrastructureAfterFailedBuild
 
@@ -217,7 +216,7 @@ class SnapshotInfraBuilder:
                 node_data = typing.cast(dict[str, typing.Any], json.load(node_info))
             except Exception as err:
                 try:
-                    deployer.remove_infrastructure()
+                    deployer.destroy_infra()
                 except Exception:
                     raise docker_exceptions.FailedToRemoveInfrastructureAfterFailedBuild
 
@@ -237,7 +236,7 @@ class SnapshotInfraBuilder:
                 )
             except docker_exceptions.FailedToBuildDockerNode as err:
                 try:
-                    deployer.remove_infrastructure()
+                    deployer.destroy_infra()
                 except Exception:
                     raise docker_exceptions.FailedToRemoveInfrastructureAfterFailedBuild
 
@@ -251,7 +250,7 @@ class SnapshotInfraBuilder:
             network_id_list = typing.cast(list[str], meta_data["networks"])
         else:
             try:
-                deployer.remove_infrastructure()
+                deployer.destroy_infra()
             except Exception:
                 raise docker_exceptions.FailedToRemoveInfrastructureAfterFailedBuild
 
@@ -271,7 +270,7 @@ class SnapshotInfraBuilder:
 
                 except Exception as err:
                     try:
-                        deployer.remove_infrastructure()
+                        deployer.destroy_infra()
                     except Exception:
                         raise docker_exceptions.FailedToRemoveInfrastructureAfterFailedBuild
 
@@ -280,7 +279,7 @@ class SnapshotInfraBuilder:
                     ) from err
             else:
                 try:
-                    deployer.remove_infrastructure()
+                    deployer.destroy_infra()
                 except Exception:
                     raise docker_exceptions.FailedToRemoveInfrastructureAfterFailedBuild
 
@@ -292,7 +291,7 @@ class SnapshotInfraBuilder:
                 net_data = typing.cast(dict[str, typing.Any], json.load(net_info))
             except Exception as err:
                 try:
-                    deployer.remove_infrastructure()
+                    deployer.destroy_infra()
                 except Exception:
                     raise docker_exceptions.FailedToRemoveInfrastructureAfterFailedBuild
 
@@ -308,12 +307,12 @@ class SnapshotInfraBuilder:
                 )
             except docker_exceptions.FailedToBuildDockerNetwork as err:
                 try:
-                    deployer.remove_infrastructure()
+                    deployer.destroy_infra()
                 except Exception:
                     raise docker_exceptions.FailedToRemoveInfrastructureAfterFailedBuild
 
                 raise docker_exceptions.FailedToBuildDockerInsfrastructure(
-                    f'failed to build the volume from "networks/{net_id}.json"'
+                    f'failed to build the network from "networks/{net_id}.json"'
                 )
 
         return deployer
@@ -321,16 +320,6 @@ class SnapshotInfraBuilder:
     def __build_docker_volume(
         self, deployer: DockerDeployer, vol_data: dict[str, typing.Any]
     ) -> DockerVolume:
-        if "type" in vol_data:
-            if typing.cast(str, vol_data["type"]) != InfraType.DOCKER.name:
-                raise docker_exceptions.FailedToBuildDockerVolume(
-                    f"the volume is not a docker volume"
-                )
-        else:
-            raise docker_exceptions.FailedToBuildDockerVolume(
-                f"failed to recognise the type"
-            )
-
         if "name" in vol_data:
             name = vol_data["name"]
         else:
@@ -348,19 +337,7 @@ class SnapshotInfraBuilder:
         else:
             raise docker_exceptions.FailedToBuildDockerVolume(f"failed to get a state")
 
-        if "config" in vol_data:
-            config = typing.cast(dict[str, typing.Any], vol_data["config"])
-        else:
-            raise docker_exceptions.FailedToBuildDockerVolume(f"failed to get a config")
-
-        try:
-            vc = VolumeConfig.from_dict(config)
-        except Exception as err:
-            raise docker_exceptions.FailedToBuildDockerVolume(
-                f"incorrect config for the volume"
-            )
-
-        volume = deployer.put_volume_config(name=name, config=vc)
+        volume = deployer.add_docker_volume(name=name)
 
         if state == EntityState.DEPLOYED.name:
             try:
@@ -370,7 +347,7 @@ class SnapshotInfraBuilder:
                     f"failed to deploy the volume {name}"
                 ) from err
 
-        return typing.cast(DockerVolume, volume)
+        return volume
 
     def __build_docker_node(
         self,
@@ -419,7 +396,7 @@ class SnapshotInfraBuilder:
                 f"failed to fetch correct config"
             )
 
-        node = deployer.put_node_config(name=name, config=nc)
+        node = deployer.node_from_config(name=name, config=nc)
         node = typing.cast(DockerNode, node)
 
         if state == EntityState.DEPLOYED.name:
@@ -474,53 +451,77 @@ class SnapshotInfraBuilder:
                 finally:
                     client.close()
 
-                node.push_image_to_run(image=loaded_image, image_tag=new_tag)
-
-            mount_configs: list[MountConfig] = []
-
-            if "mounted" in node_data:
-                for mnt_src in node_data["mounted"].keys():
-                    try:
-                        mtype_name = node_data["mounted"][mnt_src]["mounted"]["type"]
-                        if mtype_name == MountableType.VOLUME.name:
-                            mounted = volume_map.get(mnt_src, None)
-
-                            if mounted is None:
-                                raise docker_exceptions.FailedToBuildDockerNode(
-                                    f"cannot find a docker volume"
-                                )
-                        elif mtype_name == MountableType.HOSTPATH.name:
-                            if not os.path.exists(mnt_src):
-                                raise docker_exceptions.FailedToBuildDockerNode(
-                                    f"cannot find the path {mnt_src} on the host"
-                                )
-
-                            mounted = HostPathDesc(path=mnt_src)
-                    except Exception as err:
-                        raise docker_exceptions.FailedToBuildDockerNode(
-                            f"cannot find the path {mnt_src} on the host"
-                        )
-
-                    try:
-                        mount_configs.append(
-                            MountConfig(
-                                mounted=mounted,  # type: ignore
-                                mount_path=node_data["mounted"][mnt_src]["mount_path"],
-                                read_only=node_data["mounted"][mnt_src]["read_only"],
-                            )
-                        )
-                    except Exception as err:
-                        raise docker_exceptions.FailedToBuildDockerNode(
-                            f"failed to extract mount config for the volume {mnt_src}"
-                        ) from err
-            else:
-                raise docker_exceptions.FailedToBuildDockerNode(
-                    f'cannot extract "mounted" field'
+                node._push_image_to_run(  # pyright: ignore[reportPrivateUsage]
+                    image=loaded_image, image_tag=new_tag
                 )
 
+            bind_mount_configs: list[BindMountConfig] = []
+            volume_mount_configs: list[VolumeMountConfig] = []
+
+            if "bind_mount_configs" in node_data:
+                for bmc_data in node_data["bind_mount_configs"]:
+
+                    try:
+                        bmc = BindMountConfig.from_dict(data=bmc_data)
+                    except Exception as err:
+                        raise docker_exceptions.FailedToBuildDockerNode(
+                            f"failed to create a BindMountConfig"
+                        ) from err
+
+                    bind_mount_configs.append(bmc)
+
+            else:
+                raise docker_exceptions.FailedToBuildDockerNode(
+                    f'JSON Encoded data does not include "bind_mount_configs"'
+                )
+
+            if "volume_mount_configs" in node_data:
+                for vmc_data in node_data["volume_mount_configs"]:
+
+                    try:
+                        volume_id = vmc_data["volume"]
+                    except Exception as err:
+                        raise docker_exceptions.FailedToBuildDockerNode(
+                            f"failed to get a Docker Volume UUID from JSON-Encoded data"
+                        ) from err
+
+                    volume = volume_map.get(volume_id)
+
+                    if volume is None:
+                        raise docker_exceptions.FailedToBuildDockerNode(
+                            f"failed to find a Docker Volume with id {volume_id}"
+                        )
+
+                    vmc_signature = inspect.signature(
+                        VolumeMountConfig
+                    ).parameters.keys()
+                    vmc_init_args: dict[str, typing.Any] = {"volume": volume}
+
+                    for arg_name in vmc_signature:
+
+                        if arg_name in vmc_init_args:
+                            continue
+
+                        try:
+                            arg_value = vmc_data[arg_name]
+                        except Exception as err:
+                            raise docker_exceptions.FailedToBuildDockerNode(
+                                f"failed to fetch {arg_name} value from JSON-Encoded data"
+                            ) from err
+
+                        vmc_init_args[arg_name] = arg_value
+
+                    volume_mount_configs.append(VolumeMountConfig(**vmc_init_args))
+
             try:
-                node.deploy(mount_configs=mount_configs)
+
+                node.deploy(
+                    bind_mount_configs=bind_mount_configs,
+                    volume_mount_configs=volume_mount_configs,
+                )
+
             except Exception as err:
+
                 raise docker_exceptions.FailedToBuildDockerNode(
                     f"failed to deploy node {node.inf_name}"
                 ) from err
@@ -574,7 +575,7 @@ class SnapshotInfraBuilder:
                 f"incorrect network config"
             ) from err
 
-        net = deployer.put_network_config(name=name, config=nc)
+        net = deployer.network_from_config(name=name, config=nc)
         net = typing.cast(DockerNetwork, net)
 
         if state == EntityState.DEPLOYED.name:

@@ -5,7 +5,7 @@ import concurrent.futures as pool
 import os
 
 from ..exception import docker_exceptions, common_exceptions
-from ..infra import Volume, Node, Network, Deployer
+from ..infra import Node, Network, Deployer
 from ..common_interfaces import EntityRegistry
 from ..common_types import InfraType, SnapshotDescription
 from .docker_volume import DockerVolume
@@ -13,13 +13,10 @@ from .docker_node import DockerNode
 from .docker_network import DockerNetwork
 from ..common_utils import SnapshotArchiveBuilder
 from ..docker_utils import docker_image_save, DockerClientSession
-from ..infra_configs import NodeConfig, NetConfig, VolumeConfig
+from ..infra_configs import NodeConfig, NetConfig
 
 
 class DockerDeployer(Deployer):
-    """Реализация интерфейса `Deployer` для создания инфраструктуры `Docker`\n
-    Смотри документацию `Deployer` для информации о методах
-    """
 
     def __init__(self, id: uuid.UUID | None = None) -> None:
         self.__uuid: uuid.UUID = uuid.uuid4() if id is None else id
@@ -30,7 +27,7 @@ class DockerDeployer(Deployer):
 
     # ----- интерфейсные методы
 
-    def put_node_config(self, name: str, config: NodeConfig) -> Node:
+    def node_from_config(self, name: str, config: NodeConfig) -> Node:
         d_node = DockerNode(
             name=name,
             config=config,
@@ -46,7 +43,7 @@ class DockerDeployer(Deployer):
                 self.__docker_nodes.get_entity_by_name(d_node.inf_name),
             )
 
-    def put_network_config(self, name: str, config: NetConfig) -> Network:
+    def network_from_config(self, name: str, config: NetConfig) -> Network:
         d_net = DockerNetwork(
             name=name,
             config=config,
@@ -62,8 +59,8 @@ class DockerDeployer(Deployer):
                 self.__docker_networks.get_entity_by_name(d_net.inf_name),
             )
 
-    def put_volume_config(self, name: str, config: VolumeConfig) -> Volume:
-        d_volume = DockerVolume(name=name, config=config, session=self.__docker_session)
+    def add_docker_volume(self, name: str) -> DockerVolume:
+        d_volume = DockerVolume(name=name, session=self.__docker_session)
 
         if self.__docker_volumes.put_object_in_registry(entity=d_volume):
             return d_volume
@@ -73,14 +70,7 @@ class DockerDeployer(Deployer):
                 self.__docker_volumes.get_entity_by_name(d_volume.inf_name),
             )
 
-    def clear_infrastructure(self) -> None:
-        self.__clear_nodes()
-
-        self.__clear_networks()
-
-        self.__clear_volumes()
-
-    def remove_infrastructure(self) -> None:
+    def destroy_infra(self) -> None:
         self.__remove_nodes()
 
         self.__remove_networks()
@@ -98,8 +88,10 @@ class DockerDeployer(Deployer):
         return typing.cast(Mapping[str, Network], self.__docker_networks.get_name_map())
 
     @property
-    def volumes(self) -> Mapping[str, Volume]:
-        return typing.cast(Mapping[str, Volume], self.__docker_volumes.get_name_map())
+    def docker_volumes(self) -> Mapping[str, DockerVolume]:
+        return typing.cast(
+            Mapping[str, DockerVolume], self.__docker_volumes.get_name_map()
+        )
 
     @property
     def uuid(self) -> uuid.UUID:
@@ -199,7 +191,7 @@ class DockerDeployer(Deployer):
                 d_node = typing.cast(DockerNode, node)
 
                 try:
-                    image, image_full_tag = d_node.docker_commit(pause=True)
+                    image, image_full_tag = d_node._docker_commit(pause=True)
                 except common_exceptions.EntityIsRemovedException:
                     self.__docker_nodes.pop_object_from_registry(entity=node)
                     continue
@@ -301,54 +293,6 @@ class DockerDeployer(Deployer):
         return SnapshotDescription(name=snapshot_name)
 
     # ------ приватные методы
-
-    def __clear_nodes(self) -> None:
-        for node_name in list(self.__docker_nodes.get_name_map().keys()):
-            node = self.__docker_nodes.get_entity_by_name(name=node_name)
-            node = typing.cast(DockerNode, node)
-
-            try:
-                node.clear()
-            except common_exceptions.EntityIsRemovedException:
-                self.__docker_nodes.pop_object_from_registry(entity=node)
-            except common_exceptions.EntityIsNotDeployed:
-                pass
-            except docker_exceptions.DockerClearError as err:
-                raise docker_exceptions.DockerClearError(
-                    f"failed to clear the node {node_name}"
-                ) from err
-
-    def __clear_networks(self) -> None:
-        for net_name in list(self.__docker_networks.get_name_map().keys()):
-            network = self.__docker_networks.get_entity_by_name(name=net_name)
-            network = typing.cast(DockerNetwork, network)
-
-            try:
-                network.clear()
-            except common_exceptions.EntityIsRemovedException:
-                self.__docker_networks.pop_object_from_registry(entity=network)
-            except common_exceptions.EntityIsNotDeployed:
-                pass
-            except docker_exceptions.DockerClearError as err:
-                raise docker_exceptions.DockerClearError(
-                    f"failed to clear the network {net_name}"
-                ) from err
-
-    def __clear_volumes(self) -> None:
-        for volume_name in list(self.__docker_volumes.get_name_map().keys()):
-            volume = self.__docker_volumes.get_entity_by_name(name=volume_name)
-            volume = typing.cast(DockerVolume, volume)
-
-            try:
-                volume.clear()
-            except common_exceptions.EntityIsRemovedException:
-                self.__docker_volumes.pop_object_from_registry(entity=volume)
-            except common_exceptions.EntityIsNotDeployed:
-                pass
-            except docker_exceptions.DockerClearError as err:
-                raise docker_exceptions.DockerClearError(
-                    f"failed to clear the volume {volume_name}"
-                ) from err
 
     def __remove_nodes(self) -> None:
         for node_name in list(self.__docker_nodes.get_name_map().keys()):

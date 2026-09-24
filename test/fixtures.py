@@ -20,7 +20,7 @@ MIN_EXPECTED_SLOWDOWN = 2.0
 def deployer():
     deployer = DockerDeployer()
     yield deployer
-    deployer.remove_infrastructure()
+    deployer.destroy_infra()
 
 
 @pytest.fixture
