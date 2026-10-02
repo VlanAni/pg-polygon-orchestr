@@ -78,13 +78,13 @@ class TestDockerDeployerIntegration:
         )
 
         slow_config = NodeConfig(
-            os="alpine",
+            base_image="alpine",
             cpu_limit=1,
             mem_limit="256m",
             docker_params=slow_options,
         )
         fast_config = NodeConfig(
-            os="alpine",
+            base_image="alpine",
             cpu_limit=1,
             mem_limit="256m",
             docker_params=fast_options,
@@ -141,7 +141,7 @@ class TestDockerDeployerIntegration:
         env = {"SECRET": "my_secret", "MY_PORT": "5432", "DB": "POSTGRES"}
 
         config = NodeConfig(
-            os="alpine",
+            base_image="alpine",
             cpu_limit=1,
             mem_limit="512m",
             docker_params=DockerNodeConfigOptions(environment=env),

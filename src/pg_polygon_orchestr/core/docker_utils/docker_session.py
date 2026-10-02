@@ -42,7 +42,7 @@ class DockerClientSession:
 
             image = self.__session.images.build(
                 path=str(Path(__file__).parent),
-                buildargs={"OS_IMAGE": config.os},
+                buildargs={"OS_IMAGE": config.base_image},
                 tag=image_tag,
                 rm=True,
                 forcerm=True,
@@ -92,8 +92,8 @@ class DockerClientSession:
 
             container = self.__session.containers.create(
                 image=image,
-                cpu_period=100000,
-                cpu_quota=100000 * config.cpu_limit,
+                cpu_period=100000 if config.cpu_limit else None,
+                cpu_quota=100000 * config.cpu_limit if config.cpu_limit else None,
                 mem_limit=config.mem_limit,
                 detach=True,
                 name=name,

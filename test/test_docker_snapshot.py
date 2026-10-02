@@ -52,7 +52,7 @@ class TestDockerSnapshot:
     def test_SNAPSHOT_1__snapshot_archive_exists(
         self, deployer: DockerDeployer, ipv4_subnet: ipaddress.IPv4Network
     ):
-        node_config = NodeConfig(os="alpine", cpu_limit=1, mem_limit="256m")
+        node_config = NodeConfig(base_image="alpine", cpu_limit=1, mem_limit="256m")
 
         net_config = NetConfig(DockerNetworkConfigOptions(internal=False))
 
@@ -109,7 +109,7 @@ class TestDockerSnapshot:
     def test_SNAPSHOT_2__check_snapshot_archive_internals(
         self, deployer: DockerDeployer, ipv4_subnet: ipaddress.IPv4Network
     ):
-        node_config = NodeConfig(os="alpine", cpu_limit=1, mem_limit="256m")
+        node_config = NodeConfig(base_image="alpine", cpu_limit=1, mem_limit="256m")
         net_config = NetConfig(DockerNetworkConfigOptions(internal=False))
 
         snapshot_dir = os.path.join(
@@ -167,7 +167,7 @@ class TestDockerSnapshot:
     def test_SNAPSHOT_3__build_infrastructire_from_snapshot(
         self, deployer: DockerDeployer, ipv4_subnet: ipaddress.IPv4Network
     ):
-        node_config = NodeConfig(os="alpine", cpu_limit=1, mem_limit="256m")
+        node_config = NodeConfig(base_image="alpine", cpu_limit=1, mem_limit="256m")
         net_config = NetConfig(DockerNetworkConfigOptions(internal=False))
 
         node_a = deployer.node_from_config("node_a", config=node_config)
@@ -254,7 +254,7 @@ class TestDockerSnapshot:
     def test_SNAPSHOT_4__snapshot_restore_preserves_host_mounted_directory_data(
         self, deployer: DockerDeployer, host_temp_dir: str
     ):
-        node_config = NodeConfig(os="alpine", cpu_limit=1, mem_limit="256m")
+        node_config = NodeConfig(base_image="alpine", cpu_limit=1, mem_limit="256m")
         node = deployer.node_from_config(name="node_a", config=node_config)
         node.deploy(
             bind_mount_configs=[
@@ -327,13 +327,13 @@ class TestDockerSnapshot:
         light_node_config = NodeConfig(
             cpu_limit=1,
             mem_limit="256m",
-            os="alpine",
+            base_image="alpine",
             docker_params=DockerNodeConfigOptions(detach_from_default_bridge=True),
         )
         database_config = NodeConfig(
             cpu_limit=4,
             mem_limit="8g",
-            os="ubuntu:latest",
+            base_image="ubuntu:latest",
             docker_params=DockerNodeConfigOptions(detach_from_default_bridge=True),
         )
         net_config = NetConfig(DockerNetworkConfigOptions(internal=False))
