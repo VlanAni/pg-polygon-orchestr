@@ -38,12 +38,7 @@ class DockerNodeConfigOptions(Serializable, EasyDecodable):
             )
 
         if isinstance(entrypoint, str) and command:
-            raise ValueError(
-                "entrypoint в shell-форме полностью перекрывает и игнорирует "
-                "CMD — command в этой конфигурации не будет использован "
-                "Docker'ом никак; передай entrypoint как список (exec-форма), "
-                "если нужен ещё и command"
-            )
+            raise ValueError("entrypoint in shell form will ignore the passed command")
 
         self.__cap_add: tuple[str, ...] | None = tuple(cap_add) if cap_add else None
         self.__cap_drop: tuple[str, ...] | None = tuple(cap_drop) if cap_drop else None
