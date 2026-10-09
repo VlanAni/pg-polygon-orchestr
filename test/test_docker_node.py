@@ -35,7 +35,7 @@ class TestDockerNode:
         config1 = NodeConfig(
             cpu_limit=1,
             mem_limit="256m",
-            os="alpine:latest",
+            base_image="alpine:latest",
         )
 
         node_a = deployer.node_from_config(name="node_a", config=config1)
@@ -98,13 +98,13 @@ class TestDockerNode:
         config1 = NodeConfig(
             cpu_limit=1,
             mem_limit="256m",
-            os="alpine:latest",
+            base_image="alpine:latest",
         )
 
         config2 = NodeConfig(
             cpu_limit=1,
             mem_limit="256m",
-            os="ubuntu:latest",
+            base_image="ubuntu:latest",
         )
 
         node_a = deployer.node_from_config(name="node_a", config=config1)
@@ -160,13 +160,13 @@ class TestDockerNode:
         config = NodeConfig(
             cpu_limit=1,
             mem_limit="256m",
-            os="alpine",
+            base_image="alpine",
         )
 
         new_config = NodeConfig(
             cpu_limit=2,
             mem_limit="512m",
-            os="debian",
+            base_image="debian",
         )
 
         node = deployer.node_from_config(name="node", config=config)
@@ -222,7 +222,7 @@ class TestDockerNode:
         config = NodeConfig(
             cpu_limit=1,
             mem_limit="256m",
-            os="alpine",
+            base_image="alpine",
         )
 
         node = deployer.node_from_config(name="node", config=config)
@@ -255,6 +255,9 @@ class TestDockerNode:
         assert result.exit_code is not None and result.exit_code == 0
         assert "hello" in result.stdout and not (result.stderr)
         assert result.execution_time > 0
+
+        node.stop(1)
+        node.undeploy()
 
         with pytest.raises(common_exceptions.EntityIsNotDeployed):
             node.exec('echo "hello"')

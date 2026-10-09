@@ -43,7 +43,7 @@ class TestDockerNetwork:
         config = NodeConfig(
             cpu_limit=1,
             mem_limit="256m",
-            os="alpine",
+            base_image="alpine",
             docker_params=DockerNodeConfigOptions(detach_from_default_bridge=True),
         )
 
@@ -104,7 +104,7 @@ class TestDockerNetwork:
         config = NodeConfig(
             cpu_limit=1,
             mem_limit="512m",
-            os="alpine:latest",
+            base_image="alpine:latest",
             docker_params=DockerNodeConfigOptions(detach_from_default_bridge=True),
         )
 
@@ -155,7 +155,7 @@ class TestDockerNetwork:
         config = NodeConfig(
             cpu_limit=1,
             mem_limit="512m",
-            os="ubuntu:latest",
+            base_image="ubuntu:latest",
             docker_params=DockerNodeConfigOptions(
                 cap_add=["NET_ADMIN"],
                 detach_from_default_bridge=True,
@@ -249,7 +249,7 @@ class TestDockerNetwork:
 
     def test_NET_4__two_internal_networks_and_switch(self, deployer: DockerDeployer):
         node_config = NodeConfig(
-            os="alpine",
+            base_image="alpine",
             cpu_limit=1,
             mem_limit="256m",
             docker_params=DockerNodeConfigOptions(
@@ -258,7 +258,7 @@ class TestDockerNetwork:
         )
 
         switch_config = NodeConfig(
-            os="alpine",
+            base_image="alpine",
             cpu_limit=1,
             mem_limit="256m",
             docker_params=DockerNodeConfigOptions(
@@ -371,7 +371,7 @@ class TestDockerNetwork:
         node_config = NodeConfig(
             cpu_limit=1,
             mem_limit="256m",
-            os="alpine",
+            base_image="alpine",
             docker_params=DockerNodeConfigOptions(detach_from_default_bridge=True),
         )
         net_config = NetConfig(DockerNetworkConfigOptions(internal=False))
@@ -409,7 +409,7 @@ class TestDockerNetwork:
         node_config = NodeConfig(
             cpu_limit=1,
             mem_limit="256m",
-            os="alpine",
+            base_image="alpine",
             docker_params=DockerNodeConfigOptions(detach_from_default_bridge=True),
         )
         net_config = NetConfig(DockerNetworkConfigOptions(internal=True))
@@ -443,7 +443,7 @@ class TestDockerNetwork:
         node_config = NodeConfig(
             cpu_limit=1,
             mem_limit="256m",
-            os="alpine",
+            base_image="alpine",
             docker_params=DockerNodeConfigOptions(detach_from_default_bridge=True),
         )
         net_config = NetConfig(DockerNetworkConfigOptions(internal=False))

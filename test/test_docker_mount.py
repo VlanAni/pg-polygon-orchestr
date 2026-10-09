@@ -41,7 +41,9 @@ skip_if_no_docker = pytest.mark.skipif(
 class TestDockerMount:
 
     def test_MOUNT_1__volume_mount_persistency(self, deployer: DockerDeployer):
-        node_config = NodeConfig(cpu_limit=1, mem_limit="512m", os="ubuntu:latest")
+        node_config = NodeConfig(
+            cpu_limit=1, mem_limit="512m", base_image="ubuntu:latest"
+        )
         node = deployer.node_from_config(name="node", config=node_config)
 
         volume = deployer.add_docker_volume(name="test_volume")
@@ -70,7 +72,9 @@ class TestDockerMount:
         assert "test" in result.stdout  # type: ignore
 
     def test_MOUNT_2__read_only_volume(self, deployer: DockerDeployer):
-        node_config = NodeConfig(cpu_limit=1, mem_limit="512m", os="ubuntu:latest")
+        node_config = NodeConfig(
+            cpu_limit=1, mem_limit="512m", base_image="ubuntu:latest"
+        )
         node = deployer.node_from_config(name="node", config=node_config)
 
         volume = deployer.add_docker_volume(name="test_volume")
@@ -94,7 +98,7 @@ class TestDockerMount:
     def test_MOUNT_3__mount_directory_write_from_container_visible_on_host(
         self, deployer: DockerDeployer, host_temp_dir: str
     ):
-        config = NodeConfig(os="alpine", cpu_limit=1, mem_limit="256m")
+        config = NodeConfig(base_image="alpine", cpu_limit=1, mem_limit="256m")
         node = deployer.node_from_config(name="test_node", config=config)
 
         filename = "from_container.txt"
@@ -105,7 +109,7 @@ class TestDockerMount:
                 BindMountConfig(
                     host_mnt=BindMount(src=host_temp_dir),
                     dst=CONTAINER_MOUNT_DIR,
-                    docker_mount_options=DockerBindMountOpts(ro=False),
+                    dock_mnt_opts=DockerBindMountOpts(ro=False),
                 )
             ]
         )
@@ -138,7 +142,7 @@ class TestDockerMount:
         with open(host_file_path, "r") as f:
             assert f.read() == content
 
-        config = NodeConfig(os="alpine", cpu_limit=1, mem_limit="256m")
+        config = NodeConfig(base_image="alpine", cpu_limit=1, mem_limit="256m")
 
         node = deployer.node_from_config(name="test_node", config=config)
         node.deploy(
@@ -146,7 +150,7 @@ class TestDockerMount:
                 BindMountConfig(
                     host_mnt=BindMount(src=host_temp_dir),
                     dst=CONTAINER_MOUNT_DIR,
-                    docker_mount_options=DockerBindMountOpts(ro=False),
+                    dock_mnt_opts=DockerBindMountOpts(ro=False),
                 )
             ]
         )
@@ -163,14 +167,14 @@ class TestDockerMount:
     ):
         host_file_path, expected_content = host_temp_file
 
-        config = NodeConfig(os="alpine", cpu_limit=1, mem_limit="256m")
+        config = NodeConfig(base_image="alpine", cpu_limit=1, mem_limit="256m")
         node = deployer.node_from_config(name="test_node", config=config)
         node.deploy(
             bind_mount_configs=[
                 BindMountConfig(
                     host_mnt=BindMount(src=host_file_path),
                     dst=CONTAINER_MOUNT_FILE,
-                    docker_mount_options=DockerBindMountOpts(ro=False),
+                    dock_mnt_opts=DockerBindMountOpts(ro=False),
                 )
             ]
         )
@@ -194,7 +198,7 @@ class TestDockerMount:
         assert not os.path.exists(nonexistent_host_path)
 
     def test_MOUNT_7__volume_shared_between_two_nodes(self, deployer: DockerDeployer):
-        node_config = NodeConfig(cpu_limit=1, mem_limit="256m", os="alpine")
+        node_config = NodeConfig(cpu_limit=1, mem_limit="256m", base_image="alpine")
 
         node_a = deployer.node_from_config(name="node_a", config=node_config)
         node_b = deployer.node_from_config(name="node_b", config=node_config)
