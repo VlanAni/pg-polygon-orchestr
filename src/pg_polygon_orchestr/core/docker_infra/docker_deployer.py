@@ -343,7 +343,11 @@ class DockerDeployer(Deployer):
             self.__docker_volumes.pop_object_from_registry(entity=volume)
 
     def __freeze_nodes_before_snapshot(self, stop_timeout: int) -> list[DockerNode]:
-        nodes_registry_size = len(self.__docker_nodes.get_uuid_map())
+        nodes_registry_size = self.__docker_nodes.size
+
+        if nodes_registry_size == 0:
+            return []
+
         stopped_nodes: list[DockerNode] = list()
 
         with pool.ThreadPoolExecutor(max_workers=nodes_registry_size) as executor:
@@ -392,6 +396,10 @@ class DockerDeployer(Deployer):
     def __restart_stopped_nodes_after_snapshot(
         self, stopped_nodes: list[DockerNode]
     ) -> None:
+
+        if not (stopped_nodes):
+            return
+
         with pool.ThreadPoolExecutor(max_workers=len(stopped_nodes)) as executor:
             future_to_nodes: dict[pool.Future[None], DockerNode] = {
                 executor.submit(node.start): node for node in stopped_nodes

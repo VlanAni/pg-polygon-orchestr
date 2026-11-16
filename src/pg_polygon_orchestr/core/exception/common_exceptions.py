@@ -24,6 +24,10 @@ class DisconnectFromNetError(Exception):
     pass
 
 
+class AlreadyDisconnectedError(Exception):
+    pass
+
+
 class GetNetIpError(Exception):
     pass
 

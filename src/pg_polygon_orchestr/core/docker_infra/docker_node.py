@@ -213,10 +213,11 @@ class DockerNode(Node):
         bind_mount_configs: list[BindMountConfig] = [],
         volume_mount_configs: list[vmc.VolumeMountConfig] = [],
     ) -> None:
+
+        already_have_image: bool = False
+
         if self.__dimg and self.__ditag:
-
-            pass
-
+            already_have_image = True
         else:
             image_tag = f"{str(self.__uuid)}:v0"
             self.__ditag = image_tag
@@ -230,7 +231,6 @@ class DockerNode(Node):
                 )
 
                 self.__dimg = image
-                self.__state = EntityState.DEPLOYED
             except docker_exceptions.ImageBuildError as err:
                 raise docker_exceptions.DockerDeployError(
                     f"failed to build a docker image: {err}"
@@ -278,6 +278,15 @@ class DockerNode(Node):
             self.__bind_mounted.clear()
             self.__mounted_volumes.clear()
 
+            if not (already_have_image):
+                try:
+                    self.__clsession.ask_to_delete_image(image=self.__ditag)
+                except Exception:
+                    pass
+
+                self.__ditag = ""
+                self.__dimg = None
+
             raise docker_exceptions.DockerDeployError(
                 f"failed to create a docker container for the node {self.__inf_name}"
             ) from err
@@ -285,6 +294,14 @@ class DockerNode(Node):
         self.__state = EntityState.DEPLOYED
 
     def __clear(self) -> None:
+
+        for net in self.__conn_nets:
+            if self.__is_state_as_required(required=EntityState.DEPLOYED):
+                try:
+                    net.disconnect(node=self)  # pyright: ignore[reportPrivateUsage]
+                except common_exceptions.AlreadyDisconnectedError:
+                    pass
+
         try:
             if self.__dcont is not None:
                 self.__dcont.remove()
@@ -305,15 +322,17 @@ class DockerNode(Node):
         self.__mounted_volumes.clear()
         self.__state = EntityState.NOT_DEPLOYED
 
-        for net in self.__conn_nets:
-            if self.__is_state_as_required(required=EntityState.DEPLOYED):
-                net._free_address_of_not_deployed_node(  # pyright: ignore[reportPrivateUsage]
-                    node=self
-                )
-
         self.__conn_nets = []
 
     def __remove(self) -> None:
+
+        for net in self.__conn_nets:
+            if self.__is_state_as_required(required=EntityState.DEPLOYED):
+                try:
+                    net.disconnect(node=self)  # pyright: ignore[reportPrivateUsage]
+                except common_exceptions.AlreadyDisconnectedError:
+                    pass
+
         if self.__is_state_as_required(required=EntityState.DEPLOYED):
             try:
                 if self.__dcont is not None:
@@ -334,12 +353,6 @@ class DockerNode(Node):
         self.__config = None
         self.__bind_mounted.clear()
         self.__state = EntityState.REMOVED
-
-        for net in self.__conn_nets:
-            if self.__is_state_as_required(required=EntityState.DEPLOYED):
-                net._free_address_of_not_deployed_node(  # pyright: ignore[reportPrivateUsage]
-                    node=self
-                )
 
         self.__conn_nets = []
 
@@ -408,9 +421,9 @@ class DockerNode(Node):
         else:
             try:
                 self.__dcont.update(  # type: ignore
-                    mem_limit=new_config.mem_limit,  # type: ignore
-                    cpu_period=100000,
-                    cpu_quota=new_config.cpu_limit * 100000,  # type: ignore
+                    mem_limit=new_config.mem_limit if new_config.mem_limit else None,  # type: ignore
+                    cpu_period=100000 if new_config.cpu_limit else None,
+                    cpu_quota=new_config.cpu_limit * 100000 if new_config.cpu_limit else None,  # type: ignore
                 )
 
                 self.__config = new_config

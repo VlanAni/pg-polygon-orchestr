@@ -47,6 +47,10 @@ class EntityRegistry:
     def get_uuid_map(self) -> Mapping[uuid.UUID, Entity]:
         return self.__uuid_map
 
+    @property
+    def size(self) -> int:
+        return len(self.__name_map)
+
     def clear(self) -> None:
         self.__uuid_map.clear()
         self.__name_map.clear()
