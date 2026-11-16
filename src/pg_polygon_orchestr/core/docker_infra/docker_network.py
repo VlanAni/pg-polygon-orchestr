@@ -187,7 +187,7 @@ class DockerNetwork(Network):
         if conn_info is None:
             return
 
-        self.__subnts_reg[conn_info.subnet_label].free_address(addr=conn_info.address)  # type: ignore
+        self.__subnts_reg[conn_info.subnet_label].free_address(addr=conn_info.addr)  # type: ignore
 
     # ------ приватные коллбэки
 
@@ -264,7 +264,7 @@ class DockerNetwork(Network):
             obj_node = node
 
         if obj_node.type is InfraType.DOCKER:
-            d_node = typing.cast(docker_node.DockerNode, val=node)
+            d_node = typing.cast(docker_node.DockerNode, val=obj_node)
         else:
             raise docker_exceptions.ConnectToDockerNetError(
                 f"the node {obj_node.inf_name} is not a docker node"
@@ -338,7 +338,7 @@ class DockerNetwork(Network):
             entity = self.__shared_nodes.get_entity_by_name(name=node)
 
             if entity is None:
-                raise docker_exceptions.ConnectToDockerNetError(
+                raise docker_exceptions.DisconnectFromDockerNetError(
                     f"there's no node with the name [{node}]"
                 )
 
@@ -347,7 +347,7 @@ class DockerNetwork(Network):
             obj_node = node
 
         if obj_node.type is InfraType.DOCKER:
-            d_node = typing.cast(docker_node.DockerNode, val=node)
+            d_node = typing.cast(docker_node.DockerNode, val=obj_node)
         else:
             raise docker_exceptions.DisconnectFromDockerNetError(
                 f"the node {obj_node.inf_name} is not a docker node"
@@ -367,7 +367,7 @@ class DockerNetwork(Network):
         conn_info = self.__connd_node_map.get(d_node.uuid, None)
 
         if conn_info is None:
-            raise docker_exceptions.DisconnectFromDockerNetError(
+            raise common_exceptions.AlreadyDisconnectedError(
                 f"the node {d_node.inf_name} with id {d_node.uuid} is already disconnected"
             )
 
